@@ -41,16 +41,15 @@ def get_sp(spin_config, map):
   return map*spin_config.reshape(spin_config.shape[0], 1, spin_config.shape[1])
 
 
-def calc_Oloc(psi_sp, psi_s, mat_els, spin_config):
+def calc_Oloc(psi_sp, mat_els, spin_config):
   #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
   s_onehot = get_one_hot(spin_config)
-  #summing out zeroed values to only
+  #summing out zeroed values
   res = (mat_els * s_onehot).sum(1)
   #product of all matrix elements for one summand of the hamiltonian.
   res = res.prod(2)
   #multiplying with corresponding weights and summing over s' for each input configuration
-  print(res)
-  res = (res / psi_s * psi_sp).sum(1)
+  res = (torch.conj(res) * psi_sp).sum(1)
   return res
 
 
@@ -69,12 +68,5 @@ def get_all_spin_configs(num_lattice_sites):
   return torch.from_numpy(perm)
 
 
-def get_corr_stoch_mean(psi_s, obs_a_k_s, obs_b_k_s):
-  # (Oa_k * Ob_k')s - (Oa_k)s * (Ob_k')s
-  # make matrix of Oak,Obk' and (Oak)s(Obk')s
-  # returns:
-  # stoch mean 
-  # 1. dim: k
-  # 2. dim: k'
-  pass
+
   
