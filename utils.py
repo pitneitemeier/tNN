@@ -66,7 +66,9 @@ def get_sp(spin_config, map):
     shape = (num_alphas, num_spin_configs, num_sprimes, num_lattice sites)
     with num_sprimes = num_summands_h
   '''
-  spin_config.unsqueeze(2)
+  print(spin_config.shape, map.shape)
+  spin_config = spin_config.unsqueeze(2)
+  print(spin_config.shape)
   return map*spin_config
 
 
@@ -96,7 +98,8 @@ def calc_Oloc(psi_sp, mat_els, spin_config):
   #product of all matrix elements for one summand of the hamiltonian.
   res = res.prod(3)
   #multiplying with corresponding weights and summing over s' for each input configuration
-  O_loc = (torch.conj(res) * psi_sp).sum(2)
+  print(res.shape, psi_sp.shape)
+  O_loc = (torch.conj(res) * psi_sp.reshape(*res.shape)).sum(2)
   return O_loc
 
 
