@@ -1,56 +1,103 @@
 import torch
 import numpy as np
 
-def get_map(hamiltonian, lattice_sites):
-#1.dim: Batch
-#2.dim: Number of summands in Hamilton operator
-#3.dim: number of lattice sites
-  map = torch.ones((1, len(hamiltonian), lattice_sites), dtype=torch.int8)
-  for i, op_tuple in enumerate(hamiltonian):
+def get_map(operator, lattice_sites):
+  '''
+  Parameters
+  ----------
+  operator : Operator.Operator
+  lattice_sites : int
+  Returns 
+  -------
+    map : tensor
+      map from s -> s' for given operator
+      shape = (1, 1, num_summands_o, lattice_sites)
+      two dummy dimensions for batch
+  '''
+  map = torch.ones((1, 1, len(operator), lattice_sites), dtype=torch.int8)
+  for i, op_tuple in enumerate(operator):
     for op in op_tuple:
-      map[:, i, op.lat_site] = op.switching_map
+      map[:, :, i, op.lat_site] = op.switching_map
   return map
 
 
-def get_total_mat_els(hamiltonian, lattice_sites):
+def get_total_mat_els(operator, lattice_sites):
 #1.dim: Batch
 #2.dim: two possibilities for mat el depending on input first=+1, second=-1
-#3.dim: Number of summands in Hamilton operator
+#3.dim: Number of summands in operator
 #4.dim: number of lattice sites
-  mat_els = torch.full((1, 2, len(hamiltonian), lattice_sites), 1, dtype=torch.complex64)
-  for i, op_tuple in enumerate(hamiltonian):
+  mat_els = torch.full((1, 2, len(operator), lattice_sites), 1, dtype=torch.complex64)
+  for i, op_tuple in enumerate(operator):
     for op in op_tuple:
       mat_els[:, :, i, op.lat_site] = op.mat_els
   return mat_els
 
 
 def get_one_hot(spin_config):
-#1.dim: Batch
-#2.dim: two possibilities for mat el depending on input: first=+1, second=-1
-#3.dim: Number of summands in Hamilton operator
-#4.dim: number of lattice sites
-  return torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config))).reshape(spin_config.shape[0], 2, 1, spin_config.shape[1])
+  '''
+  Parameters
+  ----------
+  spin_config : tensor
+    shape = (num_alphas, num_spin_configs, lattice_sites)
+  Returns
+  -------
+  spin_one_hot : tensor
+    shape = (num_alphas, num_spin_configs, 2, 1, num_lattice sites)
+    2 -> two possibilities for mat el depending on input: first=+1, second=-1
+    1 dummy dimension for number of summands in hamiltonian (= #s')
+  '''
+  spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)))
+  return spin_one_hot.reshape(spin_config.shape[0], spin_config.shape[1], 2, 1, spin_config.shape[2])
 
 
 #getting s_primes for O_loc via map
 def get_sp(spin_config, map):
-  #returns:
-  #1. dim: batch size
-  #2. dim: number of summands in h = number of sp configs per s_config
-  #3. dim: lattice_sites
-  return map*spin_config.reshape(spin_config.shape[0], 1, spin_config.shape[1])
+  '''
+  Parameters
+  ----------
+  spin_config : tensor
+    shape = (num_alphas, num_spin_configs, lattice_sites)
+  map : tensor
+    map of the hamiltonian to get s' from each s
+    shape = (num_alphas, num_spin_configs, num_summands_h, num_lattice sites)
+  Returns
+  -------
+  sprimes : tensor
+    shape = (num_alphas, num_spin_configs, num_sprimes, num_lattice sites)
+    with num_sprimes = num_summands_h
+  '''
+  spin_config.unsqueeze(2)
+  return map*spin_config
 
 
 def calc_Oloc(psi_sp, mat_els, spin_config):
+  '''
+  Calculates the local Operator value given psi_sp
+  Parameters
+  ----------
+  psi_sp : tensor
+    shape = (num_alphas, num_spin_configs, num_sp, 1)
+    num_sp = num_summands_o
+  mat_els : tensor
+    shape = (num_alphas, num_spin_configs, 2, num_sp, num_lattice_sites)
+  spin_config : tensor
+    shape = (num_alphas, num_spin_configs, lattice_sites)
+  Returns
+  -------
+  O_loc : tensor
+    the local energy
+    shape = (num_alphas, num_spin_configs, 1)
+    
+  '''
   #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
   s_onehot = get_one_hot(spin_config)
-  #summing out zeroed values
-  res = (mat_els * s_onehot).sum(1)
+  #summing out zeroed values in dim 2
+  res = (mat_els * s_onehot).sum(2)
   #product of all matrix elements for one summand of the hamiltonian.
-  res = res.prod(2)
+  res = res.prod(3)
   #multiplying with corresponding weights and summing over s' for each input configuration
-  res = (torch.conj(res) * psi_sp).sum(1)
-  return res
+  O_loc = (torch.conj(res) * psi_sp).sum(2)
+  return O_loc
 
 
 from itertools import permutations
@@ -67,6 +114,6 @@ def get_all_spin_configs(num_lattice_sites):
       currently_filled += 1
   return torch.from_numpy(perm)
 
-
+get_sp()
 
   
