@@ -116,6 +116,7 @@ def get_all_spin_configs(num_lattice_sites):
 
 
 def calc_dt_psi(psi_s, alpha):
+  #TODO make this faster and less ugly!
   row = 0
   dt_psi_s = 0
   for i in range(psi_s.shape[0]):
@@ -132,6 +133,7 @@ def calc_dt_psi(psi_s, alpha):
 
 
 def loss(psi_s, psi_sp_h, psi_sp_o, dt_psi_s, o_loc, h_loc):
+  #TODO add term for initial condition and means instead of sums for alphas
   #print(dt_psi_s.shape, h_loc.shape)
   h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
