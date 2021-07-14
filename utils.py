@@ -97,7 +97,7 @@ def calc_Oloc(psi_sp, mat_els, spin_config):
   res = res.prod(3)
   #multiplying with corresponding weights and summing over s' for each input configuration
   O_loc = (torch.conj(res) * psi_sp.reshape(*res.shape)).sum(2)
-  return O_loc
+  return O_loc.unsqueeze(2)
 
 
 from itertools import permutations
@@ -129,4 +129,15 @@ def calc_dt_psi(psi_s, alpha):
     else:
       dt_psi_s = torch.cat((dt_psi_s, row.reshape(1, row.shape[0])), dim=0)
   return dt_psi_s.unsqueeze(2)
+
+
+def loss(psi_s, psi_sp_h, psi_sp_o, dt_psi_s, o_loc, h_loc):
+  #print(dt_psi_s.shape, h_loc.shape)
+  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
+  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
+  dt_psi_h_loc_sum = (torch.abs(dt_psi_s * h_loc)**2).sum(1) 
+
+  abs_val = (( dt_psi_sq_sum - h_loc_sq_sum )**2).sum(0)
+  angle = ( dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) ).sum(0)
+  return (angle + abs_val).squeeze()
   
