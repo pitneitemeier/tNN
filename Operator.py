@@ -31,7 +31,7 @@ class Operator:
 
   def __add__(self, other):
     if isinstance(other, Operator):
-      return [(self), (other)]
+      return [(self,), (other,)]
     elif isinstance(other, collections.Sequence):
       if (type(other) == list):
         if (len(other) == 0 or isinstance(other[0][0], Operator)):
