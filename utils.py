@@ -72,7 +72,7 @@ def get_sp(spin_config, map):
 
 def calc_Oloc(psi_sp, mat_els, spin_config):
   '''
-  Calculates the local Operator value given psi_sp
+  Calculates the local Operator value
   Parameters
   ----------
   psi_sp : tensor
@@ -114,6 +114,6 @@ def get_all_spin_configs(num_lattice_sites):
       currently_filled += 1
   return torch.from_numpy(perm)
 
-get_sp()
+
 
   
