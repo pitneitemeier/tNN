@@ -116,6 +116,7 @@ def get_all_spin_configs(num_lattice_sites):
 
 
 def calc_dt_psi(psi_s, alpha):
+  '''
   #TODO make this faster and less ugly!
   row = 0
   dt_psi_s = 0
@@ -129,6 +130,11 @@ def calc_dt_psi(psi_s, alpha):
       dt_psi_s = row.reshape(1, row.shape[0])
     else:
       dt_psi_s = torch.cat((dt_psi_s, row.reshape(1, row.shape[0])), dim=0)
+  '''
+  #Alternative way:
+  dt_psi_s = torch.autograd.grad(psi_s.sum(), alpha, create_graph=True)[0][:,:, 0]
+  #print(grad.shape, dt_psi_s.shape)
+  #print(grad == dt_psi_s)
   return dt_psi_s.unsqueeze(2)
 
 
