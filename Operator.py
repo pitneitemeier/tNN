@@ -23,7 +23,7 @@ class Operator:
         print('multiplication of operators on same lattice site nyi')
         return self
       else:
-        return (self,other)
+        return [(self,other)]
     else:
       print('multiplication for this type nyi')
       return self
