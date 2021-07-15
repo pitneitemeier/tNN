@@ -116,30 +116,14 @@ def get_all_spin_configs(num_lattice_sites):
 
 
 def calc_dt_psi(psi_s, alpha):
-  '''
-  #TODO make this faster and less ugly!
-  row = 0
-  dt_psi_s = 0
-  for i in range(psi_s.shape[0]):
-    for j in range(psi_s.shape[1]):
-      if (j==0):
-        row = torch.autograd.grad(psi_s[i,j,:], alpha, create_graph=True)[0][i, j, 0].reshape(1,)
-      else:
-        row = torch.cat( (row, torch.autograd.grad(psi_s[i,j,:], alpha, create_graph=True)[0][i, j, 0].reshape(1,)) )
-    if (i==0):
-      dt_psi_s = row.reshape(1, row.shape[0])
-    else:
-      dt_psi_s = torch.cat((dt_psi_s, row.reshape(1, row.shape[0])), dim=0)
-  '''
-  #Alternative way:
+  #TODO documentation
+
   dt_psi_s = torch.autograd.grad(psi_s.sum(), alpha, create_graph=True)[0][:,:, 0]
-  #print(grad.shape, dt_psi_s.shape)
-  #print(grad == dt_psi_s)
   return dt_psi_s.unsqueeze(2)
 
 
-def loss(dt_psi_s, h_loc, psi_s_0, o_loc):
-  #TODO add term for initial condition 
+def train_loss(dt_psi_s, h_loc, psi_s_0, o_loc):
+  #TODO Documentation
 
   h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
@@ -149,6 +133,12 @@ def loss(dt_psi_s, h_loc, psi_s_0, o_loc):
 
   abs_val = torch.mean( ( dt_psi_sq_sum - h_loc_sq_sum )**2 )
   angle = torch.mean( dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
-  init_cond = torch.mean( psi_0_o_loc_sum / psi_s_0_sq_sum )
+  init_cond = torch.mean( (psi_0_o_loc_sum / psi_s_0_sq_sum - 1) ** 2 )
   return (angle + abs_val + 50 * init_cond).squeeze()
   
+def val_loss(psi_s, o_loc, o_target):
+  psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
+  psi_s_o_loc_sum = (psi_s * o_loc).sum(1)
+  observable = psi_sq_sum / psi_s_o_loc_sum
+  loss = ((observable - o_target) ** 2).sum(0)
+  return loss.squeeze(), observable.squeeze()
