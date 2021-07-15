@@ -35,7 +35,6 @@ class Operator:
     elif isinstance(other, collections.Sequence):
       if (type(other) == list):
         if (len(other) == 0 or isinstance(other[0][0], Operator)):
-          print('adding to sequence')
           return  [(self,)] + other
         else:
           print('cant add to sequence, wrong type')

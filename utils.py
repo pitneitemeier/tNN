@@ -26,7 +26,7 @@ def get_total_mat_els(operator, lattice_sites):
 #2.dim: two possibilities for mat el depending on input first=+1, second=-1
 #3.dim: Number of summands in operator
 #4.dim: number of lattice sites
-  mat_els = torch.full((1, 2, len(operator), lattice_sites), 1, dtype=torch.complex64)
+  mat_els = torch.ones((1, 2, len(operator), lattice_sites), dtype=torch.complex64)
   for i, op_tuple in enumerate(operator):
     for op in op_tuple:
       mat_els[:, :, i, op.lat_site] = op.mat_els
@@ -46,8 +46,8 @@ def get_one_hot(spin_config):
     2 -> two possibilities for mat el depending on input: first=+1, second=-1
     1 dummy dimension for number of summands in hamiltonian (= #s')
   '''
-  spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)))
-  return spin_one_hot.reshape(spin_config.shape[0], spin_config.shape[1], 2, 1, spin_config.shape[2])
+  spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)), dim=2)
+  return spin_one_hot.unsqueeze(3)
 
 
 #getting s_primes for O_loc via map
@@ -87,16 +87,16 @@ def calc_Oloc(psi_sp, mat_els, spin_config):
   O_loc : tensor
     the local energy
     shape = (num_alphas, num_spin_configs, 1)
-    
   '''
   #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
   s_onehot = get_one_hot(spin_config)
   #summing out zeroed values in dim 2
   res = (mat_els * s_onehot).sum(2)
+  
   #product of all matrix elements for one summand of the hamiltonian.
   res = res.prod(3)
   #multiplying with corresponding weights and summing over s' for each input configuration
-  O_loc = (torch.conj(res) * psi_sp.reshape(*res.shape)).sum(2)
+  O_loc = (torch.conj(res) * psi_sp.squeeze()).sum(2)
   return O_loc.unsqueeze(2)
 
 
@@ -117,28 +117,60 @@ def get_all_spin_configs(num_lattice_sites):
 
 def calc_dt_psi(psi_s, alpha):
   #TODO documentation
-
   dt_psi_s = torch.autograd.grad(psi_s.sum(), alpha, create_graph=True)[0][:,:, 0]
   return dt_psi_s.unsqueeze(2)
 
 
 def train_loss(dt_psi_s, h_loc, psi_s_0, o_loc):
   #TODO Documentation
-
   h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
   dt_psi_h_loc_sum = (torch.abs(dt_psi_s * h_loc)**2).sum(1) 
-  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_0_o_loc_sum = (psi_s_0 * o_loc).sum(1)
 
   abs_val = torch.mean( ( dt_psi_sq_sum - h_loc_sq_sum )**2 )
   angle = torch.mean( dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
-  init_cond = torch.mean( (psi_0_o_loc_sum / psi_s_0_sq_sum - 1) ** 2 )
-  return (-angle + abs_val + 50 * init_cond).squeeze()
+
+  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
+  psi_0_o_loc_sum = (psi_s_0 * o_loc).sum(1)
+
+  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
+  #return (-angle + abs_val + 1000 * init_cond)
+  return 1000 * init_cond + angle
+
+def train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc):
+  #part to satisfy initial condition
+  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
+  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
+  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
+
+  #part to satisfy schrödinger equation
+  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
+  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
+  dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
+  schroedinger = torch.mean(torch.abs( h_loc_sq_sum + dt_psi_sq_sum + 2j * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+
+  return schroedinger + 1000 * init_cond
+  #return init_cond
+
+  
   
 def val_loss(psi_s, o_loc, o_target):
   psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
-  psi_s_o_loc_sum = (psi_s * o_loc).sum(1)
-  observable = (psi_sq_sum / psi_s_o_loc_sum).squeeze()
+  psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
+  observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze()
   loss = (torch.abs((observable - o_target)) ** 2).sum(0)
-  return loss, observable
+  return loss, torch.real(observable)
+
+from torch import nn
+class even_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return x**2 / 2 - x**4 / 12 + x**6 / 46
+
+class odd_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return x - x**3 / 3 + x**5 * (2 / 15)
+  
