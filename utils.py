@@ -134,12 +134,11 @@ def train_loss(dt_psi_s, h_loc, psi_s_0, o_loc):
   abs_val = torch.mean( ( dt_psi_sq_sum - h_loc_sq_sum )**2 )
   angle = torch.mean( dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
   init_cond = torch.mean( (psi_0_o_loc_sum / psi_s_0_sq_sum - 1) ** 2 )
-  return (angle + abs_val + 50 * init_cond).squeeze()
+  return (-angle + abs_val + 50 * init_cond).squeeze()
   
 def val_loss(psi_s, o_loc, o_target):
   psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
   psi_s_o_loc_sum = (psi_s * o_loc).sum(1)
   observable = (psi_sq_sum / psi_s_o_loc_sum).squeeze()
-  print(observable.shape, o_target.shape)
   loss = (torch.abs((observable - o_target)) ** 2).sum(0)
   return loss, observable
