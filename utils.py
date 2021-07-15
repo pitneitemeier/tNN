@@ -141,5 +141,5 @@ def val_loss(psi_s, o_loc, o_target):
   psi_s_o_loc_sum = (psi_s * o_loc).sum(1)
   observable = (psi_sq_sum / psi_s_o_loc_sum).squeeze()
   print(observable.shape, o_target.shape)
-  loss = ((observable - o_target) ** 2).sum(0)
+  loss = (torch.abs((observable - o_target)) ** 2).sum(0)
   return loss, observable
