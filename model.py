@@ -3,6 +3,7 @@ import torch
 import Operator as op
 import utils
 import numpy as np
+import Datasets
 from torch.utils.data import Dataset, DataLoader
 from torch import nn
 import matplotlib.pyplot as plt
@@ -10,9 +11,10 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Using {} device'.format(device))
 g_dtype = torch.float32
 
+
 ###setting up hamiltonian ###
 lattice_sites = 4
-h2_range = [(2.5, 3.5)]
+h2_range = [(2.95, 3.05)]
 
 h1 = []
 for l in range(lattice_sites):
@@ -34,75 +36,14 @@ h_map = utils.get_map(h1 + h2, lattice_sites)
 o_map = utils.get_map(o, lattice_sites)
 
 
-
-####setting up the datamodule###
-
-class Train_Data(Dataset):
-    def __init__(self, lattice_sites, h_mat_list, h_ranges_list, o_mat, t_min=0, t_max=1):
-        
-        assert(len(h_mat_list) - 1 == len(h_ranges_list))
-        #exact sampling for now
-        self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
-
-        #saving ranges to generate alpha values each batch
-        self.t_min = t_min
-        self.t_max = t_max
-        self.h_ranges_list = h_ranges_list
-
-        #saving mat elements to pass to training loop with respective multipliers each loop
-        self.h_mat_list = h_mat_list
-        self.o_mat = o_mat
-        
-    def __len__(self):
-        #just setting 100000 as dataset size to get 100000 alphas for one epoch
-        return 100000
-
-    def __getitem__(self, index):
-        #creating the random alpha array of numspins with one value of (t, h_ext1, ..)
-        alpha_arr = torch.zeros((self.spins.shape[0], (len(self.h_mat_list))))
-        for i in range( len(self.h_mat_list) - 1 ):
-            max = self.h_ranges_list[i][1]
-            min = self.h_ranges_list[i][0] 
-            alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
-        alpha_0 = alpha_arr.clone()
-        alpha_arr[:, 0] = ( ( self.t_max - self.t_min ) * torch.rand((1,1)) + self.t_min )
-        h_mat = self.h_mat_list[0]
-        for i in range(len(self.h_mat_list) - 1):
-            h_mat = torch.cat((h_mat, alpha_arr[0, i +1] * self.h_mat_list[i + 1]), dim=2)
-
-        return self.spins, alpha_arr, alpha_0, h_mat, self.o_mat
-
-class Val_Data(Dataset):
-    def __init__(self, ED_data, ext_params : tuple, o_mat):
-        #exact sampling for now
-        self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
-        #target Magnetizations from ED Code that 
-        self.t_arr = torch.from_numpy(ED_data[:130, 0]).type(g_dtype).unsqueeze(1)
-        self.O_target = torch.from_numpy(ED_data[:130, 2]).type(g_dtype)
-
-        #saving mat elements to pass to val loop
-        self.o_mat = o_mat
-        self.ext_params = torch.zeros((1, len(ext_params)), dtype=g_dtype)
-        for i in range(len(ext_params)):
-            self.ext_params[:, i] = ext_params[i]
-        
-    def __len__(self):
-        #just full batch training here with all t
-        return self.t_arr.shape[0]
-
-    def __getitem__(self, index):
-        t_arr = self.t_arr[index].repeat(self.spins.shape[0], 1)
-        ext_param = self.ext_params.repeat(self.spins.shape[0], 1)
-        return self.spins, torch.cat((t_arr, ext_param), dim=1), self.o_mat, self.O_target[index]
-
-
+###Setting up datasets
 ED_data = np.loadtxt('ED_data.csv', delimiter=',')
 
-val_data = Val_Data(ED_data, (3,), o_mat)
+val_data = Datasets.Val_Data(lattice_sites, ED_data, (3,), o_mat, g_dtype)
 val_dataloader = DataLoader(val_data, batch_size=len(val_data), num_workers=24)
 val_iter = iter(val_dataloader)
 
-train_data = Train_Data(lattice_sites, [h1_mat, h2_mat], h2_range, o_mat, t_max=3)
+train_data = Datasets.Train_Data(lattice_sites, [h1_mat, h2_mat], h2_range, o_mat, g_dtype,  t_max=0.5)
 train_dataloader = DataLoader(dataset=train_data, batch_size=1000, num_workers=24)
 data_iter = iter(train_dataloader)
 
@@ -243,8 +184,8 @@ class Model(pl.LightningModule):
 
     #calc loss
     loss = utils.train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc, alpha)
+    self.log('train_loss', loss, prog_bar=True, logger=True)
     return {'loss': loss}
-
 
   def validation_step(self, batch, batch_idx):
     spins, alpha, o_mat, o_target = batch
@@ -256,13 +197,13 @@ class Model(pl.LightningModule):
     val_loss, observable = utils.val_loss(psi_s, o_loc, o_target)
     val_loss = val_loss.type(g_dtype)
     observable = observable.type(g_dtype)
-    self.log('val_loss', val_loss, prog_bar=True)
+    self.log('val_loss', val_loss, prog_bar=True, logger=True)
     fig, ax = plt.subplots()
     ax.plot(alpha[:, 0, 0].cpu(), observable.cpu())
     ax.plot(alpha[:, 0, 0].cpu(), o_target.cpu())
+    self.logger.experiment.add_figure('magnetization', fig)
     fig.savefig('magnetization.png')
     return {'val_loss': val_loss}
-
 
   def configure_optimizers(self):
     optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -272,5 +213,5 @@ class Model(pl.LightningModule):
 model = Model(lattice_sites, h_map, o_map)
 print(model)
 
-trainer = pl.Trainer(fast_dev_run=False, gpus=1)
+trainer = pl.Trainer(fast_dev_run=True, gpus=1)
 trainer.fit(model, train_dataloader, val_dataloader)
