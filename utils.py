@@ -121,23 +121,24 @@ def calc_dt_psi(psi_s, alpha):
   return dt_psi_s.unsqueeze(2)
 
 
-def train_loss(dt_psi_s, h_loc, psi_s_0, o_loc):
+def train_loss(dt_psi_s, h_loc, psi_s_0, o_loc, alpha):
   #TODO Documentation
   h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
-  dt_psi_h_loc_sum = (torch.abs(dt_psi_s * h_loc)**2).sum(1) 
+  dt_psi_h_loc_sum = (torch.abs(torch.conj(dt_psi_s) * h_loc)**2).sum(1) 
 
-  abs_val = torch.mean( ( dt_psi_sq_sum - h_loc_sq_sum )**2 )
-  angle = torch.mean( dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
+  abs_val = torch.mean( (torch.abs( dt_psi_sq_sum - h_loc_sq_sum ))**2 )
+  angle = torch.mean( torch.acos(torch.sqrt(dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )))
 
   psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_0_o_loc_sum = (psi_s_0 * o_loc).sum(1)
+  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
 
   init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
   #return (-angle + abs_val + 1000 * init_cond)
-  return 1000 * init_cond + angle
+  return 100 * init_cond + angle #+ abs_val
+  #return init_cond
 
-def train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc):
+def train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc, alpha):
   #part to satisfy initial condition
   psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
   psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
@@ -147,9 +148,9 @@ def train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc):
   h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
   dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-  schroedinger = torch.mean(torch.abs( h_loc_sq_sum + dt_psi_sq_sum + 2j * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+  schroedinger = torch.mean( torch.exp(- alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum + 2j * torch.imag(dt_psi_h_loc_sum) ) ** 2)
 
-  return schroedinger + 1000 * init_cond
+  return schroedinger + 100 * init_cond
   #return init_cond
 
   
