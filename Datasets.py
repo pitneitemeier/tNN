@@ -43,8 +43,8 @@ class Val_Data(Dataset):
         #exact sampling for now
         self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
         #target Magnetizations from ED Code that 
-        self.t_arr = torch.from_numpy(ED_data[:40, 0]).type(g_dtype).unsqueeze(1)
-        self.O_target = torch.from_numpy(ED_data[:40, 2]).type(g_dtype)
+        self.t_arr = torch.from_numpy(ED_data[:, 0]).type(g_dtype).unsqueeze(1)
+        self.O_target = torch.from_numpy(ED_data[:, 1]).type(g_dtype)
 
         #saving mat elements to pass to val loop
         self.o_mat = o_mat

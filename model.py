@@ -14,11 +14,11 @@ g_dtype = torch.float32
 
 ###setting up hamiltonian ###
 lattice_sites = 4
-h2_range = [(2.95, 3.05)]
+h2_range = [(0.4, 0.56)]
 
 h1 = []
 for l in range(lattice_sites):
-  h1 = op.Sz(l) * op.Sz((l+1) % lattice_sites) + h1
+  h1 = op.Sz(l) * (op.Sz((l+1) % lattice_sites)) + h1
 
 h2 = []
 for l in range(lattice_sites):
@@ -43,8 +43,8 @@ val_data = Datasets.Val_Data(lattice_sites, ED_data, (3,), o_mat, g_dtype)
 val_dataloader = DataLoader(val_data, batch_size=len(val_data), num_workers=24)
 val_iter = iter(val_dataloader)
 
-train_data = Datasets.Train_Data(lattice_sites, [h1_mat, h2_mat], h2_range, o_mat, g_dtype,  t_max=0.5)
-train_dataloader = DataLoader(dataset=train_data, batch_size=1000, num_workers=24)
+train_data = Datasets.Train_Data(lattice_sites, [h1_mat, h2_mat], h2_range, o_mat, g_dtype,  t_max=1)
+train_dataloader = DataLoader(dataset=train_data, batch_size=2000, num_workers=24)
 data_iter = iter(train_dataloader)
 
 
@@ -64,9 +64,7 @@ class Model(pl.LightningModule):
     self.lattice_net = nn.Sequential(
       nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular'),
       utils.even_act(),
-      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='circular'),
-      utils.odd_act(),
-      nn.Conv1d(16, 32, kernel_size=2, padding=1, padding_mode='circular'),
+      nn.Conv1d(8, 8, kernel_size=2, padding=1, padding_mode='circular'),
       utils.odd_act(),
       nn.Flatten(start_dim=1, end_dim=-1)
     )
@@ -74,16 +72,14 @@ class Model(pl.LightningModule):
     self.tNN = nn.Sequential(
       nn.Linear(2, 32),
       nn.ReLU(),
-      nn.Linear(32, 64),
-      nn.ReLU(),
-      nn.Linear(64, 128),
-      nn.ReLU(),
+      nn.Linear(32, 32),
+      nn.ReLU()
     )
 
     self.psi = nn.Sequential(
-      nn.Linear( 128 + 32 * ( lattice_sites + 3 ), 128 ),
+      nn.Linear( 32 + 8 * ( lattice_sites + 2 ), 64 ),
       nn.ReLU(),
-      nn.Linear(128, 64),
+      nn.Linear(64, 64),
       nn.ReLU(),
       nn.Linear(64, 2),
     )
@@ -183,7 +179,7 @@ class Model(pl.LightningModule):
     o_loc = utils.calc_Oloc(psi_sp_o, o_mat, spins)
 
     #calc loss
-    loss = utils.train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc, alpha)
+    loss = utils.train_loss(dt_psi_s, h_loc, psi_s_0, o_loc, alpha)
     self.log('train_loss', loss, prog_bar=True, logger=True)
     return {'loss': loss}
 
@@ -213,5 +209,5 @@ class Model(pl.LightningModule):
 model = Model(lattice_sites, h_map, o_map)
 print(model)
 
-trainer = pl.Trainer(fast_dev_run=True, gpus=1)
+trainer = pl.Trainer(fast_dev_run=False, gpus=1)
 trainer.fit(model, train_dataloader, val_dataloader)

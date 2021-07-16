@@ -6,6 +6,9 @@ __pycache__/
 #lightning logs
 /lightning_logs
 
+#saved imgs
+*.png
+
 # C extensions
 *.so
 
