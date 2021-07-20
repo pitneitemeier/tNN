@@ -193,8 +193,8 @@ def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha):
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
   dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
   #print("abs val diff: ", torch.abs(h_loc_sq_sum - dt_psi_h_loc_sum))
-  #schroedinger = torch.mean( torch.exp(- alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-  schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+  schroedinger = torch.mean( torch.exp(- alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+  #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
 
   #part to encourage a normed wave fun
   batched_norm = psi_norm(psi_s)
@@ -258,15 +258,21 @@ class complex_celu(nn.Module):
   def forward(self, x): 
     return self.celu(torch.real(x)) + 1j * self.celu(torch.imag(x))
 
-class Mult_Inputs(nn.Module):
-  def __init__(self):
-    super().__init__()
-  def forward(self, inp1, inp2): 
-    return inp1 * inp2
-
 class Euler_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
     x = x.reshape(x.shape[0], int(x.shape[1] / 2), 2)
     return x[:, :, 0] * torch.exp(1j*x[:, :, 1])
+
+class to_complex(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return x + 0.j
+
+class sinh_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return torch.sinh(x)
