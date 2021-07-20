@@ -19,7 +19,7 @@ g_dtype = torch.float32
 ###setting up hamiltonian ###
 lattice_sites = 4
 
-h2_range = [(0.4, 0.6)]
+h2_range = [(0.45, 0.55)]
 
 h1 = []
 for l in range(lattice_sites):
@@ -61,7 +61,7 @@ val_dataloader = DataLoader(val_data, batch_size=len(val_data), num_workers=24)
 val_iter = iter(val_dataloader)
 
 train_data = Datasets.Train_Data(lattice_sites, [h1_mat, h2_mat], h2_range, o_mat, g_dtype,  t_max=3)
-train_dataloader = DataLoader(dataset=train_data, batch_size=1000, num_workers=24)
+train_dataloader = DataLoader(dataset=train_data, batch_size=100, num_workers=24)
 data_iter = iter(train_dataloader)
 
 
@@ -79,55 +79,75 @@ class Model(pl.LightningModule):
     '''
     super().__init__()
     
-    '''
+    
     self.lattice_net = nn.Sequential(
       nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular'),
       utils.even_act(),
-      nn.Conv1d(8, 8, kernel_size=2, padding=1, padding_mode='circular'),
+      nn.Conv1d(8, 8, kernel_size=2, padding=1, padding_mode='zeros'),
       utils.odd_act(),
-      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='circular'),
+      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros'),
       utils.odd_act(),
       nn.Flatten(start_dim=1, end_dim=-1)
     )
-    '''
-    lattice_hidden = 64
-    mult_size = 128
-    tNN_hidden = 256
-    psi_hidden = 128
     
+    lattice_hidden = 64
+    mult_size = 16 * (lattice_sites + 3)
+    tNN_hidden = 64
+    psi_hidden = 64
+    
+    '''
     self.lattice_net = nn.Sequential(
       # 2 * lattice_sites due to one hot encoding
       nn.Linear(2 * lattice_sites, lattice_hidden),
       nn.ReLU(),
       nn.Linear(lattice_hidden, mult_size),
+      nn.ReLU(),
+      nn.Linear(lattice_hidden, mult_size),
       nn.ReLU()
     )
-    
+    '''
     self.tNN = nn.Sequential(
       nn.Linear(2, tNN_hidden),
+      nn.ReLU(),
+      nn.Linear(tNN_hidden, tNN_hidden),
       nn.ReLU(),
       nn.Linear(tNN_hidden, tNN_hidden),
       nn.ReLU(),
       nn.Linear(tNN_hidden, mult_size),
       nn.ReLU()
     )
-
+    '''
     self.psi = nn.Sequential(
       nn.Linear( mult_size, psi_hidden ),
       nn.ReLU(),
       nn.Linear(psi_hidden, psi_hidden),
       nn.ReLU(),
+      nn.Linear(psi_hidden, psi_hidden),
+      nn.ReLU(),
       nn.Linear(psi_hidden, 2)
+    )
+    '''
+    self.psi = nn.Sequential(
+      nn.Linear( mult_size, psi_hidden),
+      nn.ReLU(),
+      nn.Linear(psi_hidden, psi_hidden),
+      nn.ReLU(),
+      utils.Euler_act(),
+      nn.Linear(int(psi_hidden / 2), psi_hidden, dtype=torch.complex64),
+      utils.complex_relu(),
+      nn.Linear(psi_hidden, 1, dtype=torch.complex64)
     )
     
     '''
-    hidden_size = 32
+    hidden_size = 64
     self.simple_model = nn.Sequential(
-      nn.Linear( 2 * lattice_sites + 1 , hidden_size, dtype=g_dtype),
-      nn.SELU(),
+      nn.Linear( 2 * lattice_sites + 2 , hidden_size, dtype=g_dtype),
+      nn.ReLU(),
       nn.Linear( hidden_size, hidden_size, dtype=g_dtype),
-      nn.SELU(),
-      nn.Linear( hidden_size, 2, dtype=g_dtype)
+      nn.ReLU(),
+      nn.Linear( hidden_size, hidden_size, dtype=g_dtype),
+      nn.ReLU(),
+      nn.Linear( hidden_size, 4, dtype=g_dtype)
     )
     '''
     self.flatten_spins = nn.Flatten(end_dim=-1)
@@ -136,17 +156,19 @@ class Model(pl.LightningModule):
 
   def forward(self, spins, alpha):
     #unsqueeze since circular padding needs tensor of dim 3
-    #lat_out = self.lattice_net(spins.unsqueeze(1))
-    one_hot_spins = utils.flat_one_hot(spins)
-    one_hot_spins = self.flatten_spins(one_hot_spins)
-    lat_out = self.lattice_net(one_hot_spins)
+    lat_out = self.lattice_net(spins.unsqueeze(1))
+    #one_hot_spins = utils.flat_one_hot(spins)
+    #one_hot_spins = self.flatten_spins(one_hot_spins)
+    #lat_out = self.lattice_net(one_hot_spins)
     
     t_out = self.tNN(alpha)
 
     #rad_and_phase = self.psi( torch.cat((t_out, lat_out), dim=1))
-    rad_and_phase = self.psi( t_out * lat_out )
-
-    psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] )
+    psi = self.psi( (t_out * lat_out) )
+    #rad_and_phase = self.psi( t_out * lat_out )
+    #rad_and_phase = self.simple_model( torch.cat((one_hot_spins, alpha), dim=1))
+    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] )
+    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] ) +  rad_and_phase[:, 2] * torch.exp( -1.j * rad_and_phase[:, 3] ) 
     #psi = torch.exp(-1j * alpha * spins) / np.sqrt(2)
     return psi
     
@@ -217,8 +239,6 @@ class Model(pl.LightningModule):
     psi_sp_h = self.call_forward_sp(sp_h, alpha)
     #calc h_loc for h
     h_loc = utils.calc_Oloc(psi_sp_h, h_mat, spins)
-    #print('h_loc dtype: ', h_loc.dtype)
-    #calc dt_psi(s, alpha)
     dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
     
     #get s' and psi(s', alpha) for o at t=0
@@ -245,7 +265,7 @@ class Model(pl.LightningModule):
     psi_sp_o = self.call_forward_sp(sp_o, alpha)
     o_loc = utils.calc_Oloc(psi_sp_o, o_mat, spins)
     val_loss, observable = utils.val_loss(psi_s, o_loc, o_target)
-    #self.log('val_loss', val_loss, prog_bar=True, logger=True)
+    self.log('val_loss', val_loss, prog_bar=True, logger=True)
     fig, ax = plt.subplots()
     ax.plot(alpha[:, 0, 0].cpu(), observable.cpu(), label='model prediction')
     ax.plot(alpha[:, 0, 0].cpu(), o_target.cpu(), label='ED Result', ls='--')
@@ -265,41 +285,6 @@ class Model(pl.LightningModule):
 model = Model(lattice_sites, h_map, o_map)
 print(model)
 
-trainer = pl.Trainer(fast_dev_run=False, gpus=1)
+trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=20)
 trainer.fit(model, train_dataloader, val_dataloader)
 
-'''
-spins, alpha, alpha_0, h_mat1, o_mat1 = next(data_iter)
-#print(spins.shape, alpha.shape, alpha_0.shape, h_mat1.shape, o_mat1.shape)
-#print('alpha: \n', alpha, alpha.shape)
-#print( 'spins: \n', spins, spins.shape)
-alpha.requires_grad = True
-#get psi(s, alpha)
-psi_s = model.call_forward(spins, alpha)
-#get s' and psi(s', alpha) for h
-sp_h = utils.get_sp(spins, model.h_map)
-
-psi_sp_h = model.call_forward_sp(sp_h, alpha)
-#calc h_loc for h
-#print( 'sprimes: \n', sp_h, sp_h.shape)
-#print('psi_sp_h: \n', psi_sp_h)
-h_loc = utils.calc_Oloc(psi_sp_h, h_mat, spins)
-
-#calc dt_psi(s, alpha)
-dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
-
-#print('dt_psi_s: ', dt_psi_s, dt_psi_s.shape)
-
-#get s' and psi(s', alpha) for o at t=0
-sp_o = utils.get_sp(spins, model.o_init_map)
-
-psi_sp_o = model.call_forward_sp(sp_o, alpha_0)
-psi_s_0 = model.call_forward(spins, alpha_0)
-
-#calc o_loc for o
-o_loc = utils.calc_Oloc(psi_sp_o, o_mat, spins)
-
-#calc loss
-loss = utils.train_loss2(dt_psi_s, h_loc, psi_s_0, o_loc, alpha)
-print('loss: ', loss)
-'''
