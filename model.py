@@ -84,9 +84,9 @@ class Model(pl.LightningModule):
       nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular'),
       utils.even_act(),
       nn.Conv1d(8, 8, kernel_size=2, padding=1, padding_mode='zeros'),
-      utils.odd_act(),
+      nn.ReLU(),
       nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros'),
-      utils.odd_act(),
+      nn.ReLU(),
       nn.Flatten(start_dim=1, end_dim=-1)
     )
     
@@ -107,16 +107,16 @@ class Model(pl.LightningModule):
     )
     '''
     self.tNN = nn.Sequential(
-      nn.Linear(2, tNN_hidden),
+      nn.Linear(2, 16),
       nn.ReLU(),
-      nn.Linear(tNN_hidden, tNN_hidden),
+      nn.Linear(16, 64),
       nn.ReLU(),
-      nn.Linear(tNN_hidden, tNN_hidden),
+      nn.Linear(64, 128),
       nn.ReLU(),
-      nn.Linear(tNN_hidden, mult_size),
+      nn.Linear(128, mult_size),
       nn.ReLU()
     )
-    '''
+    
     self.psi = nn.Sequential(
       nn.Linear( mult_size, psi_hidden ),
       nn.ReLU(),
@@ -130,15 +130,15 @@ class Model(pl.LightningModule):
     self.psi = nn.Sequential(
       nn.Linear( mult_size, psi_hidden),
       nn.ReLU(),
-      nn.Linear(psi_hidden, psi_hidden),
-      nn.ReLU(),
       utils.Euler_act(),
-      nn.Linear(int(psi_hidden / 2), psi_hidden, dtype=torch.complex64),
+      nn.Linear(int(psi_hidden / 2), int(psi_hidden / 2), dtype=torch.complex64),
       utils.complex_relu(),
-      nn.Linear(psi_hidden, 1, dtype=torch.complex64)
+      nn.Linear(int(psi_hidden / 2), int(psi_hidden / 2), dtype=torch.complex64),
+      utils.complex_relu(),
+      nn.Linear(int(psi_hidden / 2), 1, dtype=torch.complex64)
     )
     
-    '''
+  
     hidden_size = 64
     self.simple_model = nn.Sequential(
       nn.Linear( 2 * lattice_sites + 2 , hidden_size, dtype=g_dtype),
@@ -164,11 +164,11 @@ class Model(pl.LightningModule):
     t_out = self.tNN(alpha)
 
     #rad_and_phase = self.psi( torch.cat((t_out, lat_out), dim=1))
-    psi = self.psi( (t_out * lat_out) )
-    #rad_and_phase = self.psi( t_out * lat_out )
+    #psi = self.psi( (t_out * lat_out) )
+    rad_and_phase = self.psi( t_out * lat_out )
     #rad_and_phase = self.simple_model( torch.cat((one_hot_spins, alpha), dim=1))
-    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] )
-    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] ) +  rad_and_phase[:, 2] * torch.exp( -1.j * rad_and_phase[:, 3] ) 
+    psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] )
+    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] ) +  rad_and_phase[:, 2] * torch.exp( -1.j * rad_and_phase[:, 3] )
     #psi = torch.exp(-1j * alpha * spins) / np.sqrt(2)
     return psi
     
@@ -277,7 +277,7 @@ class Model(pl.LightningModule):
 
   def configure_optimizers(self):
     #optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-1)
-    optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
     return optimizer
 
 
@@ -285,6 +285,6 @@ class Model(pl.LightningModule):
 model = Model(lattice_sites, h_map, o_map)
 print(model)
 
-trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=20)
+trainer = pl.Trainer(fast_dev_run=False, gpus=1)
 trainer.fit(model, train_dataloader, val_dataloader)
 

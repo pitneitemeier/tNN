@@ -193,8 +193,8 @@ def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha):
   dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
   dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
   #print("abs val diff: ", torch.abs(h_loc_sq_sum - dt_psi_h_loc_sum))
-  schroedinger = torch.mean( torch.exp(- alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-  #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+  #schroedinger = torch.mean( torch.exp(- alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+  schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
 
   #part to encourage a normed wave fun
   batched_norm = psi_norm(psi_s)
