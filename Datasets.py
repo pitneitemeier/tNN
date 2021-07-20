@@ -1,4 +1,5 @@
 import numpy as np
+from torch._C import dtype
 from torch.utils.data import Dataset, DataLoader
 import torch
 import utils
@@ -9,7 +10,7 @@ class Train_Data(Dataset):
         assert(len(h_mat_list) - 1 == len(h_ranges_list))
         #exact sampling for now
         self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
-
+        self.g_dtype = g_dtype
         #saving ranges to generate alpha values each batch
         self.t_min = t_min
         self.t_max = t_max
@@ -25,11 +26,12 @@ class Train_Data(Dataset):
 
     def __getitem__(self, index):
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)
-        alpha_arr = torch.zeros((self.spins.shape[0], (len(self.h_mat_list))))
-        for i in range( len(self.h_mat_list) - 1 ):
-            max = self.h_ranges_list[i][1]
-            min = self.h_ranges_list[i][0] 
-            alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
+        alpha_arr = torch.zeros((self.spins.shape[0], (len(self.h_mat_list))), dtype=self.g_dtype)
+        if self.h_ranges_list is not None:
+            for i in range( len(self.h_mat_list) - 1 ):
+                max = self.h_ranges_list[i][1]
+                min = self.h_ranges_list[i][0] 
+                alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
         alpha_0 = alpha_arr.clone()
         alpha_arr[:, 0] = ( ( self.t_max - self.t_min ) * torch.rand((1,1)) + self.t_min )
         h_mat = self.h_mat_list[0]
@@ -48,9 +50,13 @@ class Val_Data(Dataset):
 
         #saving mat elements to pass to val loop
         self.o_mat = o_mat
-        self.ext_params = torch.zeros((1, len(ext_params)), dtype=g_dtype)
-        for i in range(len(ext_params)):
-            self.ext_params[:, i] = ext_params[i]
+        if ext_params is not None:
+            self.ext_params = torch.zeros((1, len(ext_params)), dtype=g_dtype)
+            for i in range(len(ext_params)):
+                self.ext_params[:, i] = ext_params[i]
+        else:
+            self.ext_params = None
+        
         
     def __len__(self):
         #just full batch training here with all t
@@ -58,5 +64,9 @@ class Val_Data(Dataset):
 
     def __getitem__(self, index):
         t_arr = self.t_arr[index].repeat(self.spins.shape[0], 1)
-        ext_param = self.ext_params.repeat(self.spins.shape[0], 1)
-        return self.spins, torch.cat((t_arr, ext_param), dim=1), self.o_mat, self.O_target[index]
+        if self.ext_params is not None:
+            ext_param = self.ext_params.repeat(self.spins.shape[0], 1)
+            alpha = torch.cat((t_arr, ext_param), dim=1)
+        else:
+            alpha = t_arr
+        return self.spins, alpha, self.o_mat, self.O_target[index]
