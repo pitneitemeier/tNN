@@ -19,7 +19,7 @@ g_dtype = torch.float64
 ###setting up hamiltonian ###
 lattice_sites = 4
 
-h2_range = [(0.7, 1.1)]
+h2_range = [(0.8, 1.2)]
 
 h1 = []
 for l in range(lattice_sites):
@@ -55,16 +55,25 @@ o_map = utils.get_map(o, lattice_sites)
 
 ###Setting up datasets
 
-ED_data_02 = np.loadtxt('ED_data/ED_data4_02.csv', delimiter=',')
-ED_data_05 = np.loadtxt('ED_data/ED_data4_05.csv', delimiter=',')
-ED_data_07 = np.loadtxt('ED_data/ED_data4_07.csv', delimiter=',')
-ED_data_10 = np.loadtxt('ED_data/ED_data4_1.csv', delimiter=',')
-ED_data_13 = np.loadtxt('ED_data/ED_data4_13.csv', delimiter=',')
+folder = 'ED_data/'
+file = 'ED_data4_'
+fmt = '.csv'
+path = folder + file
+ED_data_02 = np.loadtxt(path + '02' + fmt, delimiter=',')
+ED_data_05 = np.loadtxt(path + '05' + fmt, delimiter=',')
+ED_data_07 = np.loadtxt(path + '07' + fmt, delimiter=',')
+ED_data_09 = np.loadtxt(path + '09' + fmt, delimiter=',')
+ED_data_10 = np.loadtxt(path + '10' + fmt, delimiter=',')
+ED_data_11 = np.loadtxt(path + '11' + fmt, delimiter=',')
+ED_data_12 = np.loadtxt(path + '12' + fmt, delimiter=',')
+ED_data_13 = np.loadtxt(path + '13' + fmt, delimiter=',')
+
 
 #ED_data = np.stack((ED_data_02, ED_data_05, ED_data_07, ED_data_10, ED_data_13))
-#ext_params = np.array([0.2, 0.5, 0.7, 1, 1.3]).reshape(5,1)
-ED_data = np.stack((ED_data_10, ED_data_07))
-ext_params = np.array([1.0, 0.7]).reshape(2,1)
+ext_params = np.array([0.9, 1., 1.1]).reshape(3,1)
+ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
+#ED_data = np.expand_dims(ED_data_05, 0)
+#ext_params = np.array([0.5]).reshape(1,1)
 val_data = Datasets.Val_Data(lattice_sites, ED_data, o_mat, g_dtype, ext_params)
 val_dataloader = DataLoader(val_data, batch_size=1, num_workers=24)
 val_iter = iter(val_dataloader)
@@ -87,110 +96,55 @@ class Model(pl.LightningModule):
       shape = (num_ext_params, )
     '''
     super().__init__()
-    
-    '''
-    self.lattice_net = nn.Sequential(
-      nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular'),
-      utils.even_act(),
-      nn.Conv1d(8, 8, kernel_size=2, padding=1, padding_mode='zeros'),
-      nn.CELU(),
-      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros'),
-      nn.CELU(),
-      nn.Flatten(start_dim=1, end_dim=-1),
-    )
-    '''
-    self.t_min = t_min
-    self.t_max = t_max
+
     lattice_hidden = 64
-    #mult_size = 16 * (lattice_sites + 3)
-    mult_size = 64
-    tNN_hidden = 64
-    
-    
-    
+    mult_size = 128
+
     self.lattice_net = nn.Sequential(
       nn.Linear( lattice_sites, lattice_hidden, dtype=g_dtype),
       utils.even_act(),
-      nn.Linear( lattice_hidden, mult_size, dtype=g_dtype)
-    )
-    
-    self.tNN = nn.Sequential(
-      nn.Linear(2, tNN_hidden, dtype=g_dtype),
-      nn.CELU(),
-      nn.Linear(tNN_hidden, tNN_hidden, dtype=g_dtype),
-      nn.CELU(),
-      nn.Linear(tNN_hidden, mult_size, dtype=g_dtype),
+      nn.Linear( lattice_hidden, mult_size, dtype=g_dtype),
       nn.CELU()
     )
-    '''
-    self.tNN = nn.Sequential(
-      utils.to_complex(),
-      nn.Linear(2, 16, dtype=torch.complex64),
-      utils.complex_CELU(),
-      nn.Linear(16, mult_size, dtype=torch.complex64),
-      utils.complex_CELU(),
-    ) 
-    psi_hidden = 64
-    self.psi = nn.Sequential(
-      nn.Linear( mult_size, psi_hidden ),
-      nn.CELU(),
-      nn.Linear(psi_hidden, psi_hidden),
-      nn.CELU(),
-      nn.Linear(psi_hidden, psi_hidden),
-      nn.CELU(),
-      nn.Linear(psi_hidden, 2)
-    )
-    '''
-    psi_hidden = 64
+
+    tNN_hidden = 128
+
+    self.tNN_first = nn.Sequential(nn.Linear(2, tNN_hidden, dtype=g_dtype), nn.CELU() )
+    self.tNN_hidden = nn.Sequential( 
+      nn.Linear(tNN_hidden, tNN_hidden, dtype=g_dtype), nn.CELU(),
+      nn.Linear(tNN_hidden, tNN_hidden, dtype=g_dtype), nn.CELU(),
+      )
+    self.tNN_last = nn.Sequential( nn.Linear(tNN_hidden, mult_size, dtype=g_dtype), nn.CELU() ) 
+
     psi_type = torch.complex128
-    self.psi = nn.Sequential(
-      utils.to_complex(),
-      nn.Linear( mult_size, psi_hidden, dtype=psi_type),
-      utils.odd_act(),
-      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
-      utils.odd_act(),
-      nn.Linear( psi_hidden, 1, dtype=psi_type),
-      utils.odd_act(),
+    psi_hidden = 128
 
-    )
+    self.psi_first = nn.Sequential(utils.to_complex(), nn.Linear( mult_size, psi_hidden, dtype=psi_type), utils.odd_act() )
+    self.psi_hidden = nn.Sequential(
+      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type), utils.odd_act(),
+      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type), utils.odd_act(),
+      )
+    self.psi_last = nn.Linear( psi_hidden, 1, dtype=psi_type)
     
-
-    '''
-    hidden_size = 64
-    self.simple_model = nn.Sequential(
-      nn.Linear(  lattice_sites + 2 , hidden_size, dtype=g_dtype),
-      nn.ReLU(),
-      utils.to_complex(),
-      nn.Linear( hidden_size, hidden_size, dtype=torch.complex64),
-      utils.complex_tanh(),
-      nn.Linear( hidden_size, hidden_size, dtype=torch.complex64),
-      utils.complex_tanh(),
-      nn.Linear( hidden_size, 1, dtype=torch.complex64),
-    )
-    '''
     self.flatten_spins = nn.Flatten(end_dim=-1)
     self.h_map = h_map.to(device)
     self.o_init_map = o_init_map.to(device)
+    self.t_min = t_min
+    self.t_max = t_max
 
   def forward(self, spins, alpha):
     #unsqueeze since circular padding needs tensor of dim 3
-    #lat_out = self.lattice_net(spins.unsqueeze(1))
-    #one_hot_spins = utils.flat_one_hot(spins)
-    #one_hot_spins = self.flatten_spins(one_hot_spins)
-    #lat_out = self.lattice_net(one_hot_spins)
-    
     lat_out = self.lattice_net(spins)
     
-    t_out = self.tNN(alpha)
+    #residual tNN
+    y = self.tNN_first(alpha)
+    t_out = self.tNN_hidden(y)
+    t_out = self.tNN_last(y + t_out)
 
-    psi = self.psi( (t_out * lat_out) )
-    #psi = self.psi( torch.cat((t_out, lat_out), dim=1) )
+    y = self.psi_first( (t_out * lat_out) )
+    psi = self.psi_hidden( y )
+    psi = self.psi_last( psi )
 
-    #rad_and_phase = self.psi( torch.cat((t_out, lat_out), dim=1))
-    #rad_and_phase = self.psi( t_out * lat_out )
-    #psi = rad_and_phase[:, 0] * torch.exp( np.pi * 2j * self.sigmoid(rad_and_phase[:, 1]))
-    #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] ) +  rad_and_phase[:, 2] * torch.exp( -1.j * rad_and_phase[:, 3] )
-    #psi = self.simple_model( torch.cat((spins, alpha), dim=1))
     return psi
     
   def call_forward(self, spins, alpha):
@@ -251,11 +205,17 @@ class Model(pl.LightningModule):
   
   def training_step(self, batch, batch_idx):
     spins, alpha, alpha_0, h_mat, o_mat = batch
-    n = self.current_epoch % 5 + 1
-    N = 100
+
+    #calculate dynamic end time and decay rate for loss
+    n = int(self.current_epoch / 5) + 1
+    N = 10
     t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 )
+    #t_max = self.t_max
     loss_weight = 1e-2 / (t_max/self.t_max + 1e-2)
+    #update uniformly sampled t_val to new t range
     alpha[:, :, 0] = (t_max - self.t_min) * alpha[:, :, 0] + self.t_min
+
+    #gradient needed for dt_psi
     alpha.requires_grad = True
     self.log('end time', t_max, prog_bar=True)
     
@@ -286,48 +246,52 @@ class Model(pl.LightningModule):
 
   def validation_step(self, batch, batch_idx):
     spins, alpha, o_mat, o_target = batch
+    n = int(self.current_epoch / 5) + 1
+    N = 10
+    t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 ) + 0.2
+    #t_max = self.t_max    
+    max_ind = torch.argmin(torch.abs(alpha[0, :, 0, 0] - t_max))
+    spins = spins[0, :max_ind, :, :]
+    alpha = alpha[0, :max_ind, :, :]
+    o_mat = o_mat[0, :]
+    o_target = o_target[0, :max_ind]
     
-    psi_s = self.call_forward(spins.squeeze(0), alpha.squeeze(0))
-    sp_o = utils.get_sp(spins.squeeze(0), self.o_init_map)
-    psi_sp_o = self.call_forward_sp(sp_o, alpha.squeeze(0))
-    o_loc = utils.calc_Oloc(psi_sp_o, o_mat.squeeze(0), spins.squeeze(0))
-    val_loss, observable = utils.val_loss(psi_s, o_loc, o_target.squeeze(0))
+
+    psi_s = self.call_forward(spins, alpha)
+    sp_o = utils.get_sp(spins, self.o_init_map)
+    psi_sp_o = self.call_forward_sp(sp_o, alpha)
+    o_loc = utils.calc_Oloc(psi_sp_o, o_mat, spins)
+    val_loss, observable = utils.val_loss(psi_s, o_loc, o_target)
     #self.log('val_loss', val_loss, prog_bar=True, logger=True)
 
-    '''
-    fig, ax = plt.subplots()
-    ax.plot(alpha[:, 0, 0].cpu(), observable.cpu(), label='model prediction')
-    ax.plot(alpha[:, 0, 0].cpu(), o_target.cpu(), label='ED Result', ls='--')
-    ax.legend()
-    #self.logger.experiment.add_figure('magnetization', fig)
-    fig.savefig('magnetization.png')
-    plt.close(fig)
-    '''
     #print('obs_shape', observable.shape)
     #print('alpha_shape', alpha.shape)
-    #print('o_target shape', o_target.shape)
-    return {'observable' : observable, 'time': alpha[0, :, 0, 0], 'target': o_target.squeeze(0), 'ext_param': alpha[0,0,0,1]}
+    
+    return {'observable' : observable, 'time': alpha[:, 0, 0], 'target': o_target, 'ext_param': alpha[0,0,1]}
   
   def validation_epoch_end(self, outs):
     fig, ax = plt.subplots()
     for i, out in enumerate(outs):
       ext_param = float(out['ext_param'].cpu())
-      ax.plot(out['time'].cpu(), out['target'].cpu(), label=f'target g={ext_param:.1f}', c=f'C{i}', ls='--')
-      ax.plot(out['time'].cpu(), out['observable'].cpu(), label=f'model_pred g={ext_param}', c=f'C{i}')
+      ax.plot(out['time'].cpu(), out['target'].cpu(), label=f'target h={ext_param:.1f}', c=f'C{i}', ls='--')
+      ax.plot(out['time'].cpu(), out['observable'].cpu(), label=f'model_pred h={ext_param}', c=f'C{i}')
+    ax.set_xlabel('ht')
+    ax.set_ylabel('$E\,[\sigma_x]$')
     ax.legend()
+    ax.set_title('TFI magnetization')
     fig.savefig('magnetization.png')
     plt.close(fig)
 
   def configure_optimizers(self):
     #optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-2)
-    optimizer = torch.optim.Adam(self.parameters(), lr=2e-4)
+    optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
     #optimizer = torch.optim.RMSprop(self.parameters())
     #optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
     return optimizer
 
 
 
-model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=1.5)
+model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=0.4)
 print(model)
 
 trainer = pl.Trainer(fast_dev_run=False, gpus=1)

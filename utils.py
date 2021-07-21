@@ -198,9 +198,9 @@ def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight):
 
   #part to encourage a normed wave fun
   batched_norm = psi_norm(psi_s)
-  norm = torch.mean( (batched_norm - 1) ** 2 )
+  norm = torch.mean( (batched_norm - .1) ** 2 )
 
-  return schroedinger + 10 * init_cond + norm , schroedinger, init_cond, norm
+  return schroedinger + 10 * init_cond + 10 * norm , schroedinger, init_cond, norm
   #return init_cond
   
 def val_loss(psi_s, o_loc, o_target):
