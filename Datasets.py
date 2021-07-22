@@ -6,9 +6,9 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, lattice_sites, h_mat_list, h_ranges_list, o_mat, g_dtype, t_min=0, t_max=1):
+    def __init__(self, lattice_sites, num_op_h_list, h_ranges_list, g_dtype, t_min=0, t_max=1):
         
-        assert(len(h_mat_list) - 1 == len(h_ranges_list))
+        assert(len(num_op_h_list) -1 == len(h_ranges_list))
         #exact sampling for now
         self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
         self.g_dtype = g_dtype
@@ -18,8 +18,8 @@ class Train_Data(Dataset):
         self.h_ranges_list = h_ranges_list
 
         #saving mat elements to pass to training loop with respective multipliers each loop
-        self.h_mat_list = h_mat_list
-        self.o_mat = o_mat
+        self.num_op_h_list = num_op_h_list
+        self.num_summands_h = int(torch.tensor(num_op_h_list).sum())
     
         
     def __len__(self):
@@ -27,35 +27,52 @@ class Train_Data(Dataset):
         return 100000
 
     def __getitem__(self, index):
+        '''
+        Parameters
+        ----------
+        index : int
+            dummy batch index
+        Returns
+        -------
+        spins : tensor
+            shape = (num_spin_configs, lattice_sites)
+        alpha_arr : tensor
+            shape = (num_spin_configs, num_ext_params + time)
+        alpha_0 : tensor
+            same as alpha_arr but with t=0 to satisfy init cond
+        ext_param_scale : tensor
+            tensor to scale matrix elements of hamiltonian according to external parameters
+            shape = (num_spin_configs, num_summands_h, 1)
+        '''
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)
-        alpha_arr = torch.full((self.spins.shape[0], (len(self.h_mat_list))), 0, dtype=self.g_dtype) 
+        alpha_arr = torch.full((self.spins.shape[0], (len(self.num_op_h_list))), 0, dtype=self.g_dtype) 
+        ext_param_scale = torch.ones((self.spins.shape[0], self.num_summands_h), dtype=self.g_dtype)
         if self.h_ranges_list is not None:
-            for i in range( len(self.h_mat_list) - 1 ):
+            current_ind = self.num_op_h_list[0]
+            for i in range( len(self.num_op_h_list) - 1 ):
                 max = self.h_ranges_list[i][1]
                 min = self.h_ranges_list[i][0] 
-                alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
+                randval = ( (max - min) * torch.rand((1,1)) + min )
+                ext_param_scale[:, current_ind : current_ind + self.num_op_h_list[i+1]] = randval.unsqueeze(0)
+                alpha_arr[:, i+1] = randval
+                current_ind += self.num_op_h_list[i+1]
         alpha_0 = alpha_arr.clone()
         alpha_arr[:, 0] = ( ( self.t_max - self.t_min ) * torch.rand((1,1)) + self.t_min )
-        h_mat = self.h_mat_list[0]
-        for i in range(len(self.h_mat_list) - 1):
-            h_mat = torch.cat((h_mat, alpha_arr[0, i +1] * self.h_mat_list[i + 1]), dim=2)
 
-        return self.spins, alpha_arr, alpha_0, h_mat, self.o_mat
+        return self.spins, alpha_arr, alpha_0, ext_param_scale
 
 
 class Val_Data(Dataset):
-    def __init__(self, lattice_sites, ED_data, o_mat, g_dtype, ext_params = None):
+    def __init__(self, lattice_sites, ED_data, ext_params, g_dtype):
         #exact sampling for now
         self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
-        #target Magnetizations from ED Code that 
+        #target Magnetizations and corresponding times from ED Code
         self.t_arr = torch.from_numpy(ED_data[0, :, 0]).type(g_dtype).unsqueeze(1)
         #print('t_arr shape', self.t_arr.shape)
         self.O_target = torch.from_numpy(ED_data[:, :, 1]).type(g_dtype)
 
         #saving mat elements to pass to val loop
-        self.o_mat = o_mat
         self.ext_params = torch.from_numpy(ext_params).type(g_dtype)
-        
         
     def __len__(self):
         #just full batch training here with all t
@@ -63,21 +80,19 @@ class Val_Data(Dataset):
 
     def __getitem__(self, index):
         t_arr = self.t_arr.repeat(1, self.spins.shape[0]).unsqueeze(2)
-        if self.ext_params is not None:
-            ext_params = self.ext_params[index,:].broadcast_to(t_arr.shape[0], self.spins.shape[0], 1)
-            #print('repeated t_arr shape ',t_arr.shape)
-            #print('repeated_ext shape ', ext_params.shape)
-            alpha = torch.cat((t_arr, ext_params), dim=2)
-        else:
-            alpha = t_arr
+        ext_params = self.ext_params[index,:].broadcast_to(t_arr.shape[0], self.spins.shape[0], 1)
+        #print('repeated t_arr shape ',t_arr.shape)
+        #print('repeated_ext shape ', ext_params.shape)
+        alpha = torch.cat((t_arr, ext_params), dim=2)
         spins = self.spins.unsqueeze(0).repeat(self.t_arr.shape[0], 1, 1)
-        return spins, alpha, self.o_mat, self.O_target[index]
+        return spins, alpha, self.O_target[index]
 
 
 
 if (__name__ == '__main__'):
+    
     ###setting up hamiltonian ###
-    lattice_sites = 3
+    lattice_sites = 4
     g_dtype = torch.float64
 
     h2_range = [(0.15, 1.35)]
@@ -101,6 +116,7 @@ if (__name__ == '__main__'):
     h_map = utils.get_map(h1 + h2, lattice_sites)
     o_map = utils.get_map(o, lattice_sites)
 
+    '''
     ED_data_02 = np.loadtxt('ED_data/ED_data4_02.csv', delimiter=',')
     ED_data_05 = np.loadtxt('ED_data/ED_data4_05.csv', delimiter=',')
     ED_data_07 = np.loadtxt('ED_data/ED_data4_07.csv', delimiter=',')
@@ -118,3 +134,11 @@ if (__name__ == '__main__'):
     print('o_mat_shape', o_mat.shape)
     print('o_target shape', o_target.shape)
     print('alpha shape', alpha.shape)
+    '''
+    print(len(h1), len(h2))
+    train_data = Train_Data(4, [len(h1), len(h2)], [(0.9, 1.1)], torch.float64)
+    train_dataloader = DataLoader(train_data, 2)
+    train_iter = iter(train_dataloader)
+    spins, alpha_arr, alpha_0, ext_param_scale = next(train_iter)
+    print('ext_param_scale', ext_param_scale[:, 0, :])
+    print('alpha: ', alpha_arr[:, 0, 1])

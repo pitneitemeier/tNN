@@ -99,3 +99,27 @@ self.lattice_net = nn.Sequential(
       nn.CELU(),
       nn.Flatten(start_dim=1, end_dim=-1),
     )
+
+
+def train_loss(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha):
+  #TODO Documentation
+  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
+  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
+  dt_psi_h_loc_sum = (torch.abs((torch.conj(dt_psi_s) * h_loc).sum(1))**2)
+
+  abs_val = torch.mean( torch.exp(- alpha[:, 0, 0]) * (torch.abs( dt_psi_sq_sum - h_loc_sq_sum ))**2 )
+  angle = torch.mean( -1 * torch.exp(- alpha[:, 0, 0]) * dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
+  #exact_angle = torch.mean( torch.acos(torch.sqrt(torch.real(dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum)))))
+  #print('exact_angle: ', exact_angle)
+  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
+  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
+
+  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
+
+  #part to encourage a normed wave fun
+  batched_norm = psi_norm(psi_s)
+  norm = torch.mean( (batched_norm - 1) ** 2 )
+
+  #return (-angle + abs_val + 1000 * init_cond)
+  return abs_val + angle + 10 * init_cond + norm, angle, init_cond, norm
+  #return init_cond

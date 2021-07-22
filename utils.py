@@ -26,10 +26,10 @@ def get_total_mat_els(operator, lattice_sites):
 #2.dim: two possibilities for mat el depending on input first=+1, second=-1
 #3.dim: Number of summands in operator
 #4.dim: number of lattice sites
-  mat_els = torch.ones((1, 2, len(operator), lattice_sites), dtype=torch.complex64)
+  mat_els = torch.ones((1, 1, 2, len(operator), lattice_sites), dtype=torch.complex64)
   for i, op_tuple in enumerate(operator):
     for op in op_tuple:
-      mat_els[:, :, i, op.lat_site] = op.mat_els
+      mat_els[:, :, :, i, op.lat_site] = op.mat_els
   return mat_els
 
 
@@ -85,7 +85,7 @@ def get_sp(spin_config, map):
   return map*spin_config
 
 
-def calc_Oloc(psi_sp, mat_els, spin_config):
+def calc_Oloc(psi_sp, mat_els, spin_config, ext_param_scale = None):
   '''
   Calculates the local Operator value
   Parameters
@@ -97,6 +97,9 @@ def calc_Oloc(psi_sp, mat_els, spin_config):
     shape = (num_alphas, num_spin_configs, 2, num_sp, num_lattice_sites)
   spin_config : tensor
     shape = (num_alphas, num_spin_configs, lattice_sites)
+  ext_param_scale : tensor
+    tensor with the external parameters of the hamiltonian to scale up matrix elements
+    shape = (num_alphas, num_spin_configs, num_sp, 1)
   Returns
   -------
   O_loc : tensor
@@ -107,11 +110,21 @@ def calc_Oloc(psi_sp, mat_els, spin_config):
   #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
   s_onehot = get_one_hot(spin_config)
   #summing out zeroed values in dim 2
+  #print('mat_els shape ', mat_els.shape)
+  #print('s_onehot shape ', s_onehot.shape)
   res = (mat_els * s_onehot).sum(2)
-  
+  #print('res_shape', res.shape)
   #product of all matrix elements for one summand of the hamiltonian.
   res = res.prod(3)
-  #multiplying with corresponding weights and summing over s' for each input configuration
+  #print('res_shape', res.shape)
+
+  #scaling all summands of the hamiltonian with external params
+  if ext_param_scale is not None:
+    #print('res_shape', res.shape)
+    #print('ext_params_scale shape', ext_param_scale.shape)
+    res *= ext_param_scale
+
+  #multiplying with corresponding wave function and summing over s' for each input configuration
   #print("res, psi_sp shape: ",res.shape, psi_sp.shape)
   O_loc = (torch.conj(res.unsqueeze(3)) * psi_sp).sum(2)
   return O_loc
@@ -158,28 +171,7 @@ def psi_norm(psi_s):
   '''
   return (torch.abs(psi_s)**2).sum(1)
 
-def train_loss(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha):
-  #TODO Documentation
-  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
-  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
-  dt_psi_h_loc_sum = (torch.abs((torch.conj(dt_psi_s) * h_loc).sum(1))**2)
 
-  abs_val = torch.mean( torch.exp(- alpha[:, 0, 0]) * (torch.abs( dt_psi_sq_sum - h_loc_sq_sum ))**2 )
-  angle = torch.mean( -1 * torch.exp(- alpha[:, 0, 0]) * dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum) )
-  #exact_angle = torch.mean( torch.acos(torch.sqrt(torch.real(dt_psi_h_loc_sum / (dt_psi_sq_sum * h_loc_sq_sum)))))
-  #print('exact_angle: ', exact_angle)
-  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
-
-  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
-
-  #part to encourage a normed wave fun
-  batched_norm = psi_norm(psi_s)
-  norm = torch.mean( (batched_norm - 1) ** 2 )
-
-  #return (-angle + abs_val + 1000 * init_cond)
-  return abs_val + angle + 10 * init_cond + norm, angle, init_cond, norm
-  #return init_cond
 
 def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight):
   #part to satisfy initial condition
