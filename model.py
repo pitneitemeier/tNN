@@ -98,34 +98,35 @@ class Model(pl.LightningModule):
     '''
     super().__init__()
 
-    mult_size = 16 * (lattice_sites + 2)
+    lattice_hidden = 64
+    mult_size = 64
     self.lattice_net = nn.Sequential(
-      nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular', dtype=g_dtype),
+      nn.Linear( lattice_sites, lattice_hidden, dtype=g_dtype),
       nn.CELU(),
-      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros', dtype=g_dtype),
-      nn.CELU(),
-      nn.Flatten(start_dim=1, end_dim=-1),
+      nn.Linear( lattice_hidden, mult_size, dtype=g_dtype),
     )
 
     tNN_hidden = 64
     tNN_type = g_dtype
     self.tNN = nn.Sequential(
-      nn.Linear(2, 32, dtype=tNN_type),
+      nn.Linear(2, tNN_hidden, dtype=tNN_type),
       nn.CELU(),
-      nn.Linear(32, tNN_hidden, dtype=tNN_type),
+      nn.Linear(tNN_hidden, tNN_hidden, dtype=tNN_type),
       nn.CELU(),
       nn.Linear(tNN_hidden, mult_size, dtype=tNN_type),
       nn.CELU()
     )
 
-    psi_hidden = 64
-    psi_type = torch.complex128
+    psi_hidden = int( mult_size / 2 )
+    psi_type = torch.complex128 
     self.psi = nn.Sequential(
-      act.to_complex(),
-      nn.Linear( mult_size, psi_hidden, dtype=psi_type),
+      act.Euler_act(),
+      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
       act.complex_celu(),
       nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
-      act.complex_tanh(),
+      act.complex_celu(),
+      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
+      act.complex_celu(),
       nn.Linear( psi_hidden, 1, dtype=psi_type),
     )
 
@@ -137,7 +138,7 @@ class Model(pl.LightningModule):
 
   def forward(self, spins, alpha):
     #unsqueeze since circular padding needs tensor of dim 3
-    lat_out = self.lattice_net(spins.unsqueeze(1))
+    lat_out = self.lattice_net(spins)
     
     t_out = self.tNN(alpha)
 
@@ -209,6 +210,8 @@ class Model(pl.LightningModule):
     t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 )
     #t_max = self.t_max
     loss_weight = 1e-2 / (t_max/self.t_max + 1e-2)
+    if (batch_idx == 0):
+      print(loss_weight)
     #update uniformly sampled t_val to new t range
     alpha[:, :, 0] = (t_max - self.t_min) * alpha[:, :, 0] + self.t_min
 
@@ -283,13 +286,13 @@ class Model(pl.LightningModule):
 
   def configure_optimizers(self):
     #optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-2)
-    optimizer = torch.optim.Adam(self.parameters(), lr=2e-4)
+    optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
     #optimizer = torch.optim.RMSprop(self.parameters())
     #optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
     return optimizer
 
 
-model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=1)
+model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=1.5)
 print(model)
 
 trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=20)

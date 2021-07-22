@@ -90,3 +90,12 @@ self.lattice_net = nn.Sequential(
       nn.CELU(),
       act.to_complex()
     )
+
+    mult_size = 16 * (lattice_sites + 2)
+    self.lattice_net = nn.Sequential(
+      nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular', dtype=g_dtype),
+      utils.even_act(),
+      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros', dtype=g_dtype),
+      nn.CELU(),
+      nn.Flatten(start_dim=1, end_dim=-1),
+    )
