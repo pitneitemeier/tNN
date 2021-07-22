@@ -78,11 +78,15 @@ self.lattice_net = nn.Sequential(
     #psi = rad_and_phase[:, 0] * torch.exp( 1.j * rad_and_phase[:, 1] ) +  rad_and_phase[:, 2] * torch.exp( -1.j * rad_and_phase[:, 3] )
     #psi = self.simple_model( torch.cat((spins, alpha), dim=1))
 
-    mult_size = 16 * (lattice_sites + 2)
+
+
+
+    lattice_hidden = 64
+    mult_size = 64
     self.lattice_net = nn.Sequential(
-      nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular', dtype=g_dtype),
-      utils.even_act(),
-      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros', dtype=g_dtype),
+      nn.Linear( lattice_sites, lattice_hidden, dtype=g_dtype),
       nn.CELU(),
-      nn.Flatten(start_dim=1, end_dim=-1),
+      nn.Linear( lattice_hidden, mult_size, dtype=g_dtype),
+      nn.CELU(),
+      act.to_complex()
     )

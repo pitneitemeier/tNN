@@ -10,6 +10,7 @@ import Datasets
 from torch.utils.data import Dataset, DataLoader
 from torch import nn
 import matplotlib.pyplot as plt
+import activations as act
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Using {} device'.format(device))
 g_dtype = torch.float64
@@ -19,7 +20,7 @@ g_dtype = torch.float64
 ###setting up hamiltonian ###
 lattice_sites = 4
 
-h2_range = [(0.8, 1.2)]
+h2_range = [(0.95, 1.05)]
 
 h1 = []
 for l in range(lattice_sites):
@@ -70,10 +71,10 @@ ED_data_13 = np.loadtxt(path + '13' + fmt, delimiter=',')
 
 
 #ED_data = np.stack((ED_data_02, ED_data_05, ED_data_07, ED_data_10, ED_data_13))
-ext_params = np.array([0.9, 1., 1.1]).reshape(3,1)
-ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
-#ED_data = np.expand_dims(ED_data_05, 0)
-#ext_params = np.array([0.5]).reshape(1,1)
+#ext_params = np.array([0.9, 1., 1.1]).reshape(3,1)
+#ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
+ED_data = np.expand_dims(ED_data_10, 0)
+ext_params = np.array([1.]).reshape(1,1)
 val_data = Datasets.Val_Data(lattice_sites, ED_data, o_mat, g_dtype, ext_params)
 val_dataloader = DataLoader(val_data, batch_size=1, num_workers=24)
 val_iter = iter(val_dataloader)
@@ -97,35 +98,37 @@ class Model(pl.LightningModule):
     '''
     super().__init__()
 
-    lattice_hidden = 64
-    mult_size = 128
-
+    mult_size = 16 * (lattice_sites + 2)
     self.lattice_net = nn.Sequential(
-      nn.Linear( lattice_sites, lattice_hidden, dtype=g_dtype),
-      utils.even_act(),
-      nn.Linear( lattice_hidden, mult_size, dtype=g_dtype),
+      nn.Conv1d(1, 8, kernel_size=2, padding=1, padding_mode='circular', dtype=g_dtype),
+      nn.CELU(),
+      nn.Conv1d(8, 16, kernel_size=2, padding=1, padding_mode='zeros', dtype=g_dtype),
+      nn.CELU(),
+      nn.Flatten(start_dim=1, end_dim=-1),
+    )
+
+    tNN_hidden = 64
+    tNN_type = g_dtype
+    self.tNN = nn.Sequential(
+      nn.Linear(2, 32, dtype=tNN_type),
+      nn.CELU(),
+      nn.Linear(32, tNN_hidden, dtype=tNN_type),
+      nn.CELU(),
+      nn.Linear(tNN_hidden, mult_size, dtype=tNN_type),
       nn.CELU()
     )
 
-    tNN_hidden = 128
-
-    self.tNN_first = nn.Sequential(nn.Linear(2, tNN_hidden, dtype=g_dtype), nn.CELU() )
-    self.tNN_hidden = nn.Sequential( 
-      nn.Linear(tNN_hidden, tNN_hidden, dtype=g_dtype), nn.CELU(),
-      nn.Linear(tNN_hidden, tNN_hidden, dtype=g_dtype), nn.CELU(),
-      )
-    self.tNN_last = nn.Sequential( nn.Linear(tNN_hidden, mult_size, dtype=g_dtype), nn.CELU() ) 
-
+    psi_hidden = 64
     psi_type = torch.complex128
-    psi_hidden = 128
+    self.psi = nn.Sequential(
+      act.to_complex(),
+      nn.Linear( mult_size, psi_hidden, dtype=psi_type),
+      act.complex_celu(),
+      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
+      act.complex_tanh(),
+      nn.Linear( psi_hidden, 1, dtype=psi_type),
+    )
 
-    self.psi_first = nn.Sequential(utils.to_complex(), nn.Linear( mult_size, psi_hidden, dtype=psi_type), utils.odd_act() )
-    self.psi_hidden = nn.Sequential(
-      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type), utils.odd_act(),
-      nn.Linear( psi_hidden, psi_hidden, dtype=psi_type), utils.odd_act(),
-      )
-    self.psi_last = nn.Linear( psi_hidden, 1, dtype=psi_type)
-    
     self.flatten_spins = nn.Flatten(end_dim=-1)
     self.h_map = h_map.to(device)
     self.o_init_map = o_init_map.to(device)
@@ -134,18 +137,12 @@ class Model(pl.LightningModule):
 
   def forward(self, spins, alpha):
     #unsqueeze since circular padding needs tensor of dim 3
-    lat_out = self.lattice_net(spins)
+    lat_out = self.lattice_net(spins.unsqueeze(1))
     
-    #residual tNN
-    y = self.tNN_first(alpha)
-    t_out = self.tNN_hidden(y)
-    t_out = self.tNN_last(y + t_out)
+    t_out = self.tNN(alpha)
 
-    y = self.psi_first( (t_out * lat_out) )
-    psi = self.psi_hidden( y )
-    psi = self.psi_last( psi )
-
-    return psi
+    psi_out = self.psi( (t_out * lat_out) )
+    return psi_out
     
   def call_forward(self, spins, alpha):
     '''
@@ -207,7 +204,7 @@ class Model(pl.LightningModule):
     spins, alpha, alpha_0, h_mat, o_mat = batch
 
     #calculate dynamic end time and decay rate for loss
-    n = int(self.current_epoch / 5) + 1
+    n = int(self.current_epoch / 2) + 1
     N = 10
     t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 )
     #t_max = self.t_max
@@ -241,12 +238,13 @@ class Model(pl.LightningModule):
     self.log('schrodinger', schrodinger, prog_bar=True, logger=True)
     self.log('init_cond', init_cond, prog_bar=True, logger=True)
     self.log('norm', norm, prog_bar=True, logger=True)
+    self.log('train_loss', loss, logger=True)
 
     return {'loss': loss}
 
   def validation_step(self, batch, batch_idx):
     spins, alpha, o_mat, o_target = batch
-    n = int(self.current_epoch / 5) + 1
+    n = int(self.current_epoch / 2) + 1
     N = 10
     t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 ) + 0.2
     #t_max = self.t_max    
@@ -270,7 +268,7 @@ class Model(pl.LightningModule):
     return {'observable' : observable, 'time': alpha[:, 0, 0], 'target': o_target, 'ext_param': alpha[0,0,1]}
   
   def validation_epoch_end(self, outs):
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10,6))
     for i, out in enumerate(outs):
       ext_param = float(out['ext_param'].cpu())
       ax.plot(out['time'].cpu(), out['target'].cpu(), label=f'target h={ext_param:.1f}', c=f'C{i}', ls='--')
@@ -279,21 +277,21 @@ class Model(pl.LightningModule):
     ax.set_ylabel('$E\,[\sigma_x]$')
     ax.legend()
     ax.set_title('TFI magnetization')
+    self.logger.experiment.add_figure('magnetization', fig)
     fig.savefig('magnetization.png')
     plt.close(fig)
 
   def configure_optimizers(self):
     #optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-2)
-    optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(self.parameters(), lr=2e-4)
     #optimizer = torch.optim.RMSprop(self.parameters())
     #optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
     return optimizer
 
 
-
-model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=0.4)
+model = Model(lattice_sites, h_map, o_map, t_min=0, t_max=1)
 print(model)
 
-trainer = pl.Trainer(fast_dev_run=False, gpus=1)
+trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=20)
 trainer.fit(model, train_dataloader, val_dataloader)
 
