@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 #lightning logs
-/lightning_logs
+lightning_logs/
 
 #saved imgs
 *.png

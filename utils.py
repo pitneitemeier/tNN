@@ -203,4 +203,9 @@ def val_loss(psi_s, o_loc, o_target):
   loss = (torch.abs((observable - o_target)) ** 2).sum(0)
   return loss, torch.real(observable)
 
+def measure_observable(psi_s, psi_sp, o_mat, spin_config, ext_param_scale = None):
+  o_loc = calc_Oloc(psi_sp, o_mat, spin_config, ext_param_scale)
+  psi_s_sq_sum = (torch.abs(psi_s)**2).sum(1)
+  psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
+  return psi_s_o_loc_sum / psi_s_sq_sum
  

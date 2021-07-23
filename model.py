@@ -211,8 +211,6 @@ class Model(pl.LightningModule):
     t_max = self.t_min + (self.t_max - self.t_min) * np.log(10 * n / N + 1) / np.log( 11 )
     #t_max = self.t_max
     loss_weight = 1e-2 / (t_max/self.t_max + 1e-2)
-    if (batch_idx == 0):
-      print(loss_weight)
     #update uniformly sampled t_val to new t range
     alpha[:, :, 0] = (t_max - self.t_min) * alpha[:, :, 0] + self.t_min
 
@@ -227,6 +225,7 @@ class Model(pl.LightningModule):
     psi_sp_h = self.call_forward_sp(sp_h, alpha)
     #calc h_loc for h
     h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, spins, ext_param_scale)
+
     dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
     
     #get s' and psi(s', alpha) for o at t=0
