@@ -209,3 +209,12 @@ def measure_observable(psi_s, psi_sp, o_mat, spin_config, ext_param_scale = None
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
   return psi_s_o_loc_sum / psi_s_sq_sum
  
+
+def get_t_end(current_epoch, num_epochs, t_min, t_max, step_after = 5):
+  #calculate dynamic end time and decay rate for loss
+  n = int(current_epoch / step_after) + 1
+  N = int (num_epochs / step_after)
+  t_end = t_min + (t_max - t_min) * np.log(10 * n / N + 1) / np.log( 11 )
+  #t_max = self.t_max
+  loss_weight = 1e-2 / (t_end/t_max + 1e-2)
+  return t_end, loss_weight
