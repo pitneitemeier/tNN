@@ -1,6 +1,23 @@
 import torch
 import numpy as np
 
+def set_device(use_gpu, dtype):
+    # Decide which device to use.
+    if use_gpu and not torch.cuda.is_available():
+        raise RuntimeError('use_gpu is True but CUDA is not available')
+
+    if use_gpu:
+      device = torch.device('cuda')
+      if (dtype==torch.float32):
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+      elif (dtype==torch.float64):
+        torch.set_default_tensor_type('torch.cuda.DoubleTensor') 
+
+    else:
+        device = torch.device('cpu')
+        torch.set_default_dtype(dtype)
+    return device
+
 def get_map(operator, lattice_sites):
   '''
   Parameters
@@ -122,7 +139,7 @@ def calc_Oloc(psi_sp, mat_els, spin_config, ext_param_scale = None):
   if ext_param_scale is not None:
     #print('res_shape', res.shape)
     #print('ext_params_scale shape', ext_param_scale.shape)
-    res *= ext_param_scale
+    res = res * ext_param_scale
 
   #multiplying with corresponding wave function and summing over s' for each input configuration
   #print("res, psi_sp shape: ",res.shape, psi_sp.shape)

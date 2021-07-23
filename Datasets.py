@@ -6,21 +6,17 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, lattice_sites, num_op_h_list, h_ranges_list, g_dtype, t_min=0, t_max=1):
-        
-        assert(len(num_op_h_list) -1 == len(h_ranges_list))
-        #exact sampling for now
-        self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
-        self.g_dtype = g_dtype
+    def __init__(self, h_list, h_ranges_list, t_min=0, t_max=1):
+        assert(len(h_list) -1 == len(h_ranges_list))
+
         #saving ranges to generate alpha values each batch
         self.t_min = t_min
         self.t_max = t_max
         self.h_ranges_list = h_ranges_list
 
         #saving mat elements to pass to training loop with respective multipliers each loop
-        self.num_op_h_list = num_op_h_list
-        self.num_summands_h = int(torch.tensor(num_op_h_list).sum())
-    
+        self.num_op_h_list = [len(x) for x in h_list]
+        self.num_summands_h = int(torch.tensor(self.num_op_h_list).sum())
         
     def __len__(self):
         #just setting 100000 as dataset size to get 100000 alphas for one epoch
@@ -45,47 +41,44 @@ class Train_Data(Dataset):
             shape = (num_spin_configs, num_summands_h, 1)
         '''
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)
-        alpha_arr = torch.full((self.spins.shape[0], (len(self.num_op_h_list))), 0, dtype=self.g_dtype) 
-        ext_param_scale = torch.ones((self.spins.shape[0], self.num_summands_h), dtype=self.g_dtype)
+        alpha_arr = torch.zeros((1, (len(self.num_op_h_list)))) 
+        ext_param_scale = torch.ones((1, self.num_summands_h))
         if self.h_ranges_list is not None:
             current_ind = self.num_op_h_list[0]
             for i in range( len(self.num_op_h_list) - 1 ):
                 max = self.h_ranges_list[i][1]
                 min = self.h_ranges_list[i][0] 
                 randval = ( (max - min) * torch.rand((1,1)) + min )
-                ext_param_scale[:, current_ind : current_ind + self.num_op_h_list[i+1]] = randval.unsqueeze(0)
+                ext_param_scale[:, current_ind : current_ind + self.num_op_h_list[i+1]] = randval
                 alpha_arr[:, i+1] = randval
                 current_ind += self.num_op_h_list[i+1]
         alpha_0 = alpha_arr.clone()
         alpha_arr[:, 0] = ( ( self.t_max - self.t_min ) * torch.rand((1,1)) + self.t_min )
 
-        return self.spins, alpha_arr, alpha_0, ext_param_scale
+        return alpha_arr, alpha_0, ext_param_scale
 
 
 class Val_Data(Dataset):
-    def __init__(self, lattice_sites, ED_data, ext_params, g_dtype):
-        #exact sampling for now
-        self.spins = utils.get_all_spin_configs(lattice_sites).type(g_dtype)
+    def __init__(self, ED_data, ext_params):
         #target Magnetizations and corresponding times from ED Code
-        self.t_arr = torch.from_numpy(ED_data[0, :, 0]).type(g_dtype).unsqueeze(1)
+        self.t_arr = torch.from_numpy(ED_data[0, :, 0]).reshape(-1,1,1)
         #print('t_arr shape', self.t_arr.shape)
-        self.O_target = torch.from_numpy(ED_data[:, :, 1]).type(g_dtype)
+        self.O_target = torch.from_numpy(ED_data[:, :, 1])
 
-        #saving mat elements to pass to val loop
-        self.ext_params = torch.from_numpy(ext_params).type(g_dtype)
+        self.ext_params = torch.from_numpy(ext_params)
         
     def __len__(self):
         #just full batch training here with all t
         return self.ext_params.shape[0]
 
     def __getitem__(self, index):
-        t_arr = self.t_arr.repeat(1, self.spins.shape[0]).unsqueeze(2)
-        ext_params = self.ext_params[index,:].broadcast_to(t_arr.shape[0], self.spins.shape[0], 1)
+        t_arr = self.t_arr
+        ext_params = self.ext_params[index,:].reshape(1, 1, -1).expand(t_arr.shape[0], 1, -1)
         #print('repeated t_arr shape ',t_arr.shape)
         #print('repeated_ext shape ', ext_params.shape)
         alpha = torch.cat((t_arr, ext_params), dim=2)
-        spins = self.spins.unsqueeze(0).repeat(self.t_arr.shape[0], 1, 1)
-        return spins, alpha, self.O_target[index]
+        #print(alpha[:10, :, :])
+        return alpha, self.O_target[index]
 
 
 
@@ -135,10 +128,10 @@ if (__name__ == '__main__'):
     print('o_target shape', o_target.shape)
     print('alpha shape', alpha.shape)
     '''
-    print(len(h1), len(h2))
+    #print(len(h1), len(h2))
     train_data = Train_Data(4, [len(h1), len(h2)], [(0.9, 1.1)], torch.float64)
     train_dataloader = DataLoader(train_data, 2)
     train_iter = iter(train_dataloader)
-    spins, alpha_arr, alpha_0, ext_param_scale = next(train_iter)
-    print('ext_param_scale', ext_param_scale[:, 0, :])
-    print('alpha: ', alpha_arr[:, 0, 1])
+    alpha_arr, alpha_0, ext_param_scale = next(train_iter)
+    print('ext_param_scale', ext_param_scale.shape)
+    print('alpha: ', alpha_arr.shape)
