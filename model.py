@@ -116,12 +116,8 @@ def main(args):
   trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=1)
   trainer.fit(env, train_dataloader, val_dataloader)
 
-
 if (__name__ == '__main__'):
   parser = ArgumentParser()
-  #parser = pl.Trainer.add_argparse_args(parser)
-  #parser.add_argument('--lattice_sites', type=int)
   args = parser.parse_args()
   main(args)
-  #print('lattice_sites: ', args.lattice_sites)
   
