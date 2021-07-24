@@ -9,7 +9,6 @@ def wave_function(Model):
   class wave_fun(Model):
     def __init__(self, *args, **kwargs):
       super().__init__(*args, **kwargs)
-
     def call_forward(self, spins, alpha):
       '''
       makes forward callable with (num_alpha_configs, num_spin_configs)
@@ -72,21 +71,21 @@ def wave_function(Model):
       obs_map = utils.get_map(obs, lattice_sites)
       obs_mat = utils.get_total_mat_els(obs, lattice_sites)
       sp_o = utils.get_sp(spins, obs_map)
-      psi_s = self.model.call_forward(spins, alpha)
-      psi_sp_o = self.model.call_forward_sp(sp_o, alpha)
+      psi_s = self.call_forward(spins, alpha)
+      psi_sp_o = self.call_forward_sp(sp_o, alpha)
       o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins)
       psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
       psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
       observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
-      return observable
+      return torch.real(observable).detach()
   
   return wave_fun
 
 
 class Environment(pl.LightningModule):
-  def __init__(self, model, lattice_sites, h_list, obs, t_min, t_max, num_epochs, lr, device):
+  def __init__(self, model, lattice_sites, h_list, obs, t_min, t_max, num_epochs, lr, device, psi_init=None):
     super().__init__()
-
+    #self.save_hyperparameters()
     h_tot = sum(h_list, [])
     h_mat = utils.get_total_mat_els(h_tot, lattice_sites)
     obs_mat = utils.get_total_mat_els(obs, lattice_sites)
@@ -105,46 +104,49 @@ class Environment(pl.LightningModule):
     self.lr = lr
 
     self.spins = utils.get_all_spin_configs(lattice_sites).unsqueeze(0).to(device)
+    if psi_init is not None:
+      self.psi_init_s = psi_init(self.spins)
+    else:
+      self.psi_init_s = None
 
   def training_step(self, batch, batch_idx):
     alpha, alpha_0, ext_param_scale = batch
     
+    # get dynamic end time and update uniformly sampled times to this range
     t_end, loss_weight = utils.get_t_end(self.current_epoch, self.num_epochs, self.t_min, self.t_max, step_after=2)
-    
-    #update uniformly sampled t_val to new t range
     alpha[:, :, 0] = (t_end - self.t_min) * alpha[:, :, 0] + self.t_min
-    #gradient needed for dt_psi
+
+    #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
     if (alpha.shape[1] == 1):
       alpha = alpha.repeat(1, self.spins.shape[1], 1)
+    #gradient needed for dt_psi
     alpha.requires_grad = True
 
-    #get psi(s, alpha)
+    #wave functions at training times and at t=0
     psi_s = self.model.call_forward(self.spins, alpha)
-    #get s' and psi(s', alpha) for h
+    psi_s_0 = self.model.call_forward(self.spins, alpha_0)
+
+    #calculate the local energy and dt_psi for schrodinger equation
     sp_h = utils.get_sp(self.spins, self.h_map)
     psi_sp_h = self.model.call_forward_sp(sp_h, alpha)
-    #calc h_loc for h
     h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, self.spins, ext_param_scale)
-
     dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
-    
-    #get s' and psi(s', alpha) for o at t=0
-    sp_o = utils.get_sp(self.spins, self.obs_map)
-    psi_sp_o = self.model.call_forward_sp(sp_o, alpha_0)
-    psi_s_0 = self.model.call_forward(self.spins, alpha_0)
-    
-    #calc o_loc for o
-    o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, self.spins)
 
     #calc loss
-    loss, schrodinger, init_cond, norm = utils.train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight)
+    if self.psi_init_s is None:
+      #calculate the observable for the initial condition
+      sp_o = utils.get_sp(self.spins, self.obs_map)
+      psi_sp_o = self.model.call_forward_sp(sp_o, alpha_0)
+      o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, self.spins)
+      loss, schrodinger, init_cond, norm = utils.train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight)
+    else:
+      loss, schrodinger, init_cond, norm = utils.train_loss3(dt_psi_s, h_loc, psi_s, psi_s_0, alpha, loss_weight, self.psi_init_s)
 
     self.log('schrodinger', schrodinger, prog_bar=True, logger=True)
     self.log('init_cond', init_cond, prog_bar=True, logger=True)
     self.log('norm', norm, prog_bar=True, logger=True)
     self.log('train_loss', loss, logger=True)
     self.log('end time', t_end, prog_bar=True)
-
     return {'loss': loss}
   
   def validation_step(self, batch, batch_idx):
@@ -158,11 +160,9 @@ class Environment(pl.LightningModule):
     psi_s = self.model.call_forward(self.spins, alpha)
     sp_o = utils.get_sp(self.spins, self.obs_map)
     psi_sp_o = self.model.call_forward_sp(sp_o, alpha)
-    #print('psi_sp: ', psi_sp_o[:,0,:,:])
     o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, self.spins)
     
     val_loss, observable = utils.val_loss(psi_s, o_loc, o_target)
-    #print(observable[:])
     self.log('val_loss', val_loss, prog_bar=True, logger=True)
 
     return {'observable' : observable, 'time': alpha[:, 0, 0], 'target': o_target, 'ext_param': alpha[0,0,1]}
@@ -182,6 +182,5 @@ class Environment(pl.LightningModule):
     plt.close(fig)
   
   def configure_optimizers(self):
-    #optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-2)
     optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
     return optimizer
