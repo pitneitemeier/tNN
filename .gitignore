@@ -6,6 +6,12 @@ __pycache__/
 #lightning logs
 lightning_logs/
 
+#checkpoint files
+*.ckpt
+
+#jupyter notebooks
+*.ipynb
+
 #saved imgs
 *.png
 
