@@ -171,68 +171,24 @@ def psi_norm(psi_s):
   '''
   return (torch.abs(psi_s)**2).sum(1)
 
-
-
-def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight):
-  #part to satisfy initial condition
-  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
-  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
-  #print(torch.mean(psi_0_o_loc_sum / psi_s_0_sq_sum))
-
-  #part to satisfy schrödinger equation
-  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
-  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
-  dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-  #print("abs val diff: ", torch.abs(h_loc_sq_sum - dt_psi_h_loc_sum))
-  schroedinger = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-  #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-
-  #part to encourage a normed wave fun
-  psi_norm_target = 1
-  batched_norm = psi_norm(psi_s)
-  norm = torch.mean( (batched_norm - psi_norm_target) ** 2 )
-
-  return schroedinger + 50 * init_cond + 2 * norm , schroedinger, 50 * init_cond, 2* norm
-
-def train_loss3(dt_psi_s, h_loc, psi_s, psi_s_0, alpha, loss_weight, psi_init):
-  #part to satisfy initial condition
-  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_init_sq_sum = (torch.abs(psi_init)**2).sum(1)
-  psi_init_psi_s_0_sum = (torch.conj(psi_s_0) * psi_init).sum(1) 
-  init_cond = torch.mean( torch.abs( psi_s_0_sq_sum + psi_init_sq_sum - 2 * torch.real( psi_init_psi_s_0_sum ) ) ** 2)
-
-
-  #part to satisfy schrödinger equation
-  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
-  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
-  dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-  #print("abs val diff: ", torch.abs(h_loc_sq_sum - dt_psi_h_loc_sum))
-  schroedinger = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) 
-    * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-  #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-
-  #part to encourage a normed wave fun
-  psi_norm_target = 1
-  batched_norm = psi_norm(psi_s)
-  norm = torch.mean( (batched_norm - psi_norm_target) ** 2 )
-
-  return schroedinger + 50 * init_cond + 2 * norm , schroedinger, 50 * init_cond, 2* norm
-
-
 def val_loss(psi_s, o_loc, o_target):
   psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
   observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
   loss = (torch.abs((observable - o_target)) ** 2).sum(0)
   return loss, torch.real(observable)
- 
 
-def get_t_end(current_epoch, num_epochs, t_min, t_max, step_after = 5):
+
+def get_t_end(current_epoch, num_epochs, t_range, step_after = 1):
   #calculate dynamic end time and decay rate for loss
   n = int(current_epoch / step_after) + 1
   N = int (num_epochs / step_after)
-  t_end = t_min + (t_max - t_min) * np.log(10 * n / N + 1) / np.log( 11 )
+  t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
   #t_max = self.t_max
-  loss_weight = 1e-2 / (t_end/t_max + 1e-2)
+  loss_weight = 1e-2 / (t_end/t_range[1] + 1e-2)
   return t_end, loss_weight
+
+def tensor_to_string(alist):
+    format_list = ['{:.1f}' for item in alist] 
+    s = ', '.join(format_list)
+    return s.format(*alist)

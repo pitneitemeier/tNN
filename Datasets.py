@@ -6,17 +6,8 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, h_list, h_ranges_list, t_min=0, t_max=1):
-        assert(len(h_list) -1 == len(h_ranges_list))
-
-        #saving ranges to generate alpha values each batch
-        self.t_min = t_min
-        self.t_max = t_max
-        self.h_ranges_list = h_ranges_list
-
-        #saving mat elements to pass to training loop with respective multipliers each loop
-        self.num_op_h_list = [len(x) for x in h_list]
-        self.num_summands_h = int(torch.tensor(self.num_op_h_list).sum())
+    def __init__(self, h_param_range=None):
+        self.h_param_range = h_param_range
         
     def __len__(self):
         #just setting 100000 as dataset size to get 100000 alphas for one epoch
@@ -30,8 +21,6 @@ class Train_Data(Dataset):
             dummy batch index
         Returns
         -------
-        spins : tensor
-            shape = (num_spin_configs, lattice_sites)
         alpha_arr : tensor
             shape = (num_spin_configs, num_ext_params + time)
         alpha_0 : tensor
@@ -40,45 +29,35 @@ class Train_Data(Dataset):
             tensor to scale matrix elements of hamiltonian according to external parameters
             shape = (num_spin_configs, num_summands_h, 1)
         '''
-        #creating the random alpha array of numspins with one value of (t, h_ext1, ..)
-        alpha_arr = torch.zeros((1, (len(self.num_op_h_list)))) 
-        ext_param_scale = torch.ones((1, self.num_summands_h))
-        if self.h_ranges_list is not None:
-            current_ind = self.num_op_h_list[0]
-            for i in range( len(self.num_op_h_list) - 1 ):
-                max = self.h_ranges_list[i][1]
-                min = self.h_ranges_list[i][0] 
-                randval = ( (max - min) * torch.rand((1,1)) + min )
-                ext_param_scale[:, current_ind : current_ind + self.num_op_h_list[i+1]] = randval
-                alpha_arr[:, i+1] = randval
-                current_ind += self.num_op_h_list[i+1]
-        alpha_0 = alpha_arr.clone()
-        alpha_arr[:, 0] = ( ( self.t_max - self.t_min ) * torch.rand((1,1)) + self.t_min )
-
-        return alpha_arr, alpha_0, ext_param_scale
+        #creating the random alpha array of numspins with one value of (t, h_ext1, ..)‚
+        if self.h_param_range is not None:
+            alpha_arr = torch.zeros((1, (len(self.h_param_range) + 1))) 
+            for i in range( len(self.h_param_range) ):
+                max = self.h_param_range[i][1]
+                min = self.h_param_range[i][0] 
+                alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
+        else:
+            alpha_arr = torch.zeros((1,1)) 
+        alpha_arr[:, 0] = torch.rand(1,1)
+        return alpha_arr
 
 
 class Val_Data(Dataset):
-    def __init__(self, ED_data, ext_params):
-        #target Magnetizations and corresponding times from ED Code
-        self.t_arr = torch.from_numpy(ED_data[0, :, 0]).reshape(-1,1,1)
-        #print('t_arr shape', self.t_arr.shape)
-        self.O_target = torch.from_numpy(ED_data[:, :, 1])
-
-        self.ext_params = torch.from_numpy(ext_params)
+    def __init__(self, t_arr, h_params):
+        self.t_arr = torch.from_numpy(t_arr).reshape(t_arr.shape[0], t_arr.shape[1], 1, 1)
+        self.h_params = torch.from_numpy(h_params)
         
     def __len__(self):
         #just full batch training here with all t
-        return self.ext_params.shape[0]
+        return self.h_params.shape[0]
 
     def __getitem__(self, index):
-        t_arr = self.t_arr
-        ext_params = self.ext_params[index,:].reshape(1, 1, -1).expand(t_arr.shape[0], 1, -1)
+        t_arr = self.t_arr[index, :, :, :]
+        h_params = self.h_params[index,:].reshape(1, 1, -1).repeat(t_arr.shape[0], 1, 1)
         #print('repeated t_arr shape ',t_arr.shape)
         #print('repeated_ext shape ', ext_params.shape)
-        alpha = torch.cat((t_arr, ext_params), dim=2)
-        #print(alpha[:10, :, :])
-        return alpha, self.O_target[index]
+        alpha = torch.cat((t_arr, h_params), dim=2)
+        return alpha
 
 
 
