@@ -192,3 +192,6 @@ def tensor_to_string(alist):
     format_list = ['{:.1f}' for item in alist] 
     s = ', '.join(format_list)
     return s.format(*alist)
+
+def get_susceptibility(magnetization, alpha):
+  return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, 0, 1]

@@ -10,8 +10,9 @@ torch.set_default_dtype(torch.float64)
 #TODO 
 #documentation
 
+
 class Environment(LightningDataModule):
-    def __init__(self, condition_list, h_param_range, val_condition_list, val_t_arr, val_h_params, batch_size, t_range = (0,1)):
+    def __init__(self, condition_list, h_param_range, val_condition_list, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0):
         super().__init__()
         self.condition_list = condition_list
         self.val_condition_list = val_condition_list
@@ -20,16 +21,17 @@ class Environment(LightningDataModule):
         self.batch_size = batch_size
         self.val_h_params = val_h_params
         self.val_t_arr = val_t_arr
+        self.num_workers = num_workers
 
     def setup(self, stage: Optional[str] = None):
         self.train_data = Datasets.Train_Data(self.h_param_range)
         self.val_data = Datasets.Val_Data(self.val_t_arr, self.val_h_params)
 
     def train_dataloader(self):
-        return DataLoader(self.train_data, self.batch_size)
+        return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.val_data, 1)
+        return DataLoader(self.val_data, 1, num_workers=self.num_workers)
 
 
 def wave_function(Model):
@@ -133,6 +135,7 @@ def wave_function(Model):
                 condition.plot_results()
             
         def measure_observable(self, alpha, obs, lattice_sites):
+            self.spins = self.spins.to(alpha.device)
             obs_map = utils.get_map(obs, lattice_sites)
             obs_mat = utils.get_total_mat_els(obs, lattice_sites)
             sp_o = utils.get_sp(self.spins, obs_map)
@@ -142,7 +145,7 @@ def wave_function(Model):
             psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
             psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
             observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
-            return torch.real(observable).detach()
+            return torch.real(observable)
 
         def to(self, device):
             print(f'moving model to {device}')

@@ -2,7 +2,7 @@ import torch
 import utils
 import matplotlib.pyplot as plt
 from abc import ABC, abstractclassmethod
-
+#TODO create ED_susz class
 
 class Condition(ABC):
     def __init__(self, weight):
@@ -94,7 +94,7 @@ class init_observable(Condition):
         self.obs_mat = self.obs_mat.to(device)
     
     def __str__(self):
-        return f"{self.name} for {self.lattice_sites} lattice sites \n"
+        return f"{self.name} inital condition for {self.lattice_sites} lattice sites \n"
 
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
         alpha_init = alpha.detach().clone()
@@ -107,6 +107,35 @@ class init_observable(Condition):
         psi_init_obs_loc_sum = (torch.conj(psi_s_init) * obs_loc).sum(1)
         init_cond_loss = torch.mean( (torch.abs( (psi_init_obs_loc_sum / psi_s_init_sq_sum) - self.init_value)) ** 2 )
         return self.weight * init_cond_loss
+
+
+class init_scalar_prod(Condition):
+    def __init__(self, psi_init, lattice_sites, name, init_t=0, weight=1):
+        super().__init__(weight)
+        self.psi_init = psi_init
+        self.lattice_sites = lattice_sites
+        self.name = name
+        self.init_t = init_t
+        self.psi_s_init_target = None
+
+    def to(self, device):
+        pass
+
+    def __str__(self):
+        return f'{self.name} initial condition via scalar prod'
+
+    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+        alpha_init = alpha.detach().clone()
+        alpha_init[:, :, 0] = self.init_t
+        if self.psi_s_init_target is None:
+            self.psi_s_init_target = self.psi_init(spins).unsqueeze(2)
+            print(self.psi_s_init_target.shape)
+        psi_s_init = model.call_forward(spins, alpha_init)
+        psi_s_init_target_sum = (torch.abs(self.psi_s_init_target)**2).sum(1)
+        psi_s_init_sum = (torch.abs(psi_s_init)**2).sum(1)
+        psi_s_init_psi_s_target_sum = (torch.conj(psi_s_init) * self.psi_s_init_target).sum(1) 
+        init_cond = torch.mean( torch.abs( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) ** 2)
+        return self.weight * init_cond
 
 class Norm(Condition):
     def __init__(self, norm_target=1, weight=1):
@@ -166,6 +195,6 @@ class ED_Validation(Val_Condition):
         ax.set_xlabel('ht')
         ax.set_ylabel('$E\,[\sigma_x]$')
         ax.legend()
-        ax.set_title('self.name')
+        ax.set_title(self.name)
         fig.savefig(self.plot_path+f'{self.name}.png')
         plt.close(fig)

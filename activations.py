@@ -42,12 +42,19 @@ class complex_celu(nn.Module):
     return self.celu(torch.real(x)) + 1j * self.celu(torch.imag(x))
 
 
-class Euler_act(nn.Module):
+class rad_phase_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
     x = x.reshape(x.shape[0], int(x.shape[1] / 2), 2)
     return x[:, :, 0] * torch.exp(1j*x[:, :, 1])
+
+
+class Euler_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return torch.exp(1j*x)
 
 
 
