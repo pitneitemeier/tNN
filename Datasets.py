@@ -11,7 +11,7 @@ class Train_Data(Dataset):
         
     def __len__(self):
         #just setting 100000 as dataset size to get 100000 alphas for one epoch
-        return 500000
+        return 100000
 
     def __getitem__(self, index):
         '''
@@ -44,8 +44,8 @@ class Train_Data(Dataset):
 
 class Val_Data(Dataset):
     def __init__(self, t_arr, h_params):
-        self.t_arr = torch.from_numpy(t_arr).reshape(t_arr.shape[0], t_arr.shape[1], 1, 1)
-        self.h_params = torch.from_numpy(h_params)
+        self.t_arr = torch.from_numpy(t_arr).reshape(t_arr.shape[0], t_arr.shape[1], 1, 1).type(torch.get_default_dtype())
+        self.h_params = torch.from_numpy(h_params).type(torch.get_default_dtype())
         
     def __len__(self):
         #just full batch training here with all t

@@ -183,7 +183,8 @@ def get_t_end(current_epoch, num_epochs, t_range, step_after = 1):
   #calculate dynamic end time and decay rate for loss
   n = int(current_epoch / step_after) + 1
   N = int (num_epochs / step_after)
-  t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
+  #t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
+  t_end = t_range[0] + (t_range[1] - t_range[0]) * n / N 
   #t_max = self.t_max
   loss_weight = 1e-2 / (t_end/t_range[1] + 1e-2)
   return t_end, loss_weight

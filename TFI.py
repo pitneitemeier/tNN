@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+from pytorch_lightning.accelerators import accelerator
 import torch
 from torch import nn
 import activations as act
@@ -10,7 +11,7 @@ import tNN
 import utils
 import example_operators as ex_op
 import models
-
+torch.set_default_dtype(torch.float32)
 
 def psi_init(spins):
     return (spins.sum(2) == spins.shape[2]).type(torch.float64)
@@ -50,29 +51,41 @@ if __name__=='__main__':
     ED_data_12 = np.loadtxt(path + '12' + fmt, delimiter=',')
     ED_data_13 = np.loadtxt(path + '13' + fmt, delimiter=',')
 
-    #ED_data = np.stack((ED_data_02, ED_data_05, ED_data_07, ED_data_10, ED_data_13))
-    h_param_range = [(0.8, 1.2)]
-    val_h_params = np.array([0.9, 1., 1.1]).reshape(3,1)
-    ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
-    #ED_data = np.expand_dims(ED_data_05, 0)
-    #val_h_params = np.array([.5]).reshape(1,1)
+    h_param_range = [(0.1, 1.4)]
+
+    val_h_params = np.array([0.2, 0.5, 0.7, 1., 1.3]).reshape(5,1)
+    ED_data = np.stack((ED_data_02, ED_data_05, ED_data_07, ED_data_10, ED_data_13))
+    #val_h_params = np.array([0.9, 1., 1.1]).reshape(3,1)
+    #ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
+    #val_h_params = np.array([1.]).reshape(1,1)
+    #ED_data = np.expand_dims(ED_data_10, 0)
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
     init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=50)
     #init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=50)
-    norm = cond.Norm(weight=2, norm_target=1)
+    norm = cond.Norm(weight=5, norm_target=1)
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_data[:, :, 1], '', 'Mean_X_Magnetization')
- 
-    #model = models.multConvModel(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-4)
-    model = models.multConvModel.load_from_checkpoint('TFI_model4_2.ckpt')
-    model.lr = 5e-6
-    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=200, 
-        val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=ED_data[:, :, 0], t_range=(0,1.5), num_workers=24)
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=10, stochastic_weight_avg=True)
-    trainer.fit(model=model, datamodule=env)
-    trainer.save_checkpoint('TFI_model4_2')
 
+    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=200, 
+        val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=ED_data[:, :, 0], t_range=(0,3), num_workers=24)
+    
+    model = models.multConvModel(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    model.curr_learning=False
+    from pytorch_lightning.callbacks import LearningRateMonitor
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, stochastic_weight_avg=True, auto_select_gpus=True, callbacks=[lr_monitor])
+    trainer.fit(model=model, datamodule=env)
+    trainer.save_checkpoint('tmp.ckpt')
+'''
+    model = models.multConvModel.load_from_checkpoint('tmp.ckpt')
+    model.curr_learning = False
+    model.lr = 1e-4
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=15, stochastic_weight_avg=True, auto_select_gpus=True)
+    trainer.fit(model=model, datamodule=env)
+
+    #trainer.save_checkpoint('TFI_model4_2')
+'''
 '''
     t_arr = torch.from_numpy(ED_data[0, :, 0]).reshape(-1, 1, 1)
     h_param = torch.full_like(t_arr, 0.5)
