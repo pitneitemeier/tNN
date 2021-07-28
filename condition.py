@@ -175,7 +175,8 @@ class ED_Validation(Val_Condition):
         return f'Condition to match ED_data'
 
     def __call__(self, model, spins, alpha, val_set_ind):
-        self.h_param = self.h_param.new_zeros(self.h_param.shape[0], alpha.shape[2] - 1)
+        if (val_set_ind == 0):
+            self.h_param = self.h_param.new_zeros(self.h_param.shape[0], alpha.shape[2] - 1)
         self.h_param[val_set_ind, :] = alpha[0, 0, 1:]
         self.t_arr[val_set_ind, :] = alpha[:, 0, 0]
 

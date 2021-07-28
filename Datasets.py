@@ -11,7 +11,7 @@ class Train_Data(Dataset):
         
     def __len__(self):
         #just setting 100000 as dataset size to get 100000 alphas for one epoch
-        return 100000
+        return 500000
 
     def __getitem__(self, index):
         '''

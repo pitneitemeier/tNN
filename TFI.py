@@ -51,9 +51,9 @@ if __name__=='__main__':
     ED_data_13 = np.loadtxt(path + '13' + fmt, delimiter=',')
 
     #ED_data = np.stack((ED_data_02, ED_data_05, ED_data_07, ED_data_10, ED_data_13))
-    h_param_range = [(0.6, 1.4)]
-    val_h_params = np.array([0.7, 0.9, 1., 1.1, 1.3]).reshape(5,1)
-    ED_data = np.stack((ED_data_07, ED_data_09, ED_data_10, ED_data_11, ED_data_13))
+    h_param_range = [(0.8, 1.2)]
+    val_h_params = np.array([0.9, 1., 1.1]).reshape(3,1)
+    ED_data = np.stack((ED_data_09, ED_data_10, ED_data_11))
     #ED_data = np.expand_dims(ED_data_05, 0)
     #val_h_params = np.array([.5]).reshape(1,1)
 
@@ -64,11 +64,14 @@ if __name__=='__main__':
     norm = cond.Norm(weight=2, norm_target=1)
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_data[:, :, 1], '', 'Mean_X_Magnetization')
  
-    model = models.multConvModel(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-4)
-    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=400, 
+    #model = models.multConvModel(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-4)
+    model = models.multConvModel.load_from_checkpoint('TFI_model4_2.ckpt')
+    model.lr = 5e-6
+    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=200, 
         val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=ED_data[:, :, 0], t_range=(0,1.5), num_workers=24)
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=50)
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=10, stochastic_weight_avg=True)
     trainer.fit(model=model, datamodule=env)
+    trainer.save_checkpoint('TFI_model4_2')
 
 '''
     t_arr = torch.from_numpy(ED_data[0, :, 0]).reshape(-1, 1, 1)

@@ -127,6 +127,7 @@ class multConvModel(pl.LightningModule):
         super().__init__()
         self.lattice_sites = lattice_sites
         self.lr = learning_rate
+        self.opt = torch.optim.Adam
         conv_out = 16 * (lattice_sites + 1)
         mult_size = 128
         self.lattice_net = nn.Sequential(
@@ -168,4 +169,4 @@ class multConvModel(pl.LightningModule):
         return psi_out
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
+        return self.opt(self.parameters(), lr=self.lr)
