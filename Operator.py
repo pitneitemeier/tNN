@@ -54,21 +54,21 @@ class Sx(Operator):
     super().__init__(lat_site)
     self.switching_map = -1
     self.mat_els = torch.tensor([1., 1.], dtype=torch.complex64)
-    self.name = 'Sx'
+    self.name = 'S^x'
 
 class Sy(Operator):
   def __init__(self, lat_site):
     super().__init__(lat_site)
     self.switching_map = -1
     self.mat_els = torch.tensor([1.j, -1.j], dtype=torch.complex64)
-    self.name = 'Sy'
+    self.name = 'S^y'
 
 class Sz(Operator):
   def __init__(self, lat_site):
     super().__init__(lat_site)
     self.switching_map = 1
     self.mat_els = torch.tensor([1., -1.], dtype=torch.complex64)
-    self.name = 'Sz'
+    self.name = 'S^z'
 
 def print_op_list(op_list):
   out_str = "Hamiltonan = "

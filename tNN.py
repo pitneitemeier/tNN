@@ -39,7 +39,6 @@ def wave_function(Model):
             super().__init__(*args, **kwargs)
             self.spins = utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype())
             self.save_hyperparameters()
-            self.curr_learning = True
     
         def call_forward(self, spins, alpha):
             '''
@@ -101,12 +100,8 @@ def wave_function(Model):
 
         def training_step(self, alpha, batch_idx):
             t_range = self.trainer.datamodule.t_range
-            if self.curr_learning:
-                t_end, loss_weight = utils.get_t_end(self.current_epoch, self.trainer.max_epochs, t_range)
-            else:
-                t_end = t_range[1]
-                loss_weight = 1e-2
-            alpha[:, :, 0] = (t_end - t_range[0]) * alpha[:, :, 0] + t_range[0]
+            loss_weight = 0
+            alpha[:, :, 0] = (t_range[1] - t_range[0]) * alpha[:, :, 0] + t_range[0]
             #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
             if (alpha.shape[1] == 1):
                 alpha = alpha.repeat(1, self.spins.shape[1], 1)
@@ -124,7 +119,6 @@ def wave_function(Model):
             
             self.log('train_loss', loss, logger=True)
             #self.log('end_time', t_end, logger=True, prog_bar=True)
-            self.log('lr', self.lr, prog_bar=True)
             return {'loss' :loss}
 
         def validation_step(self, alpha, val_set_idx):
@@ -140,9 +134,12 @@ def wave_function(Model):
                 condition.plot_results()
             
         def measure_observable(self, alpha, obs, lattice_sites):
-            self.spins = self.spins.to(alpha.device)
+
+            alpha = alpha.to(self.device)
             obs_map = utils.get_map(obs, lattice_sites)
             obs_mat = utils.get_total_mat_els(obs, lattice_sites)
+            obs_map = obs_map.to(self.device)
+            obs_mat = obs_mat.to(self.device)
             sp_o = utils.get_sp(self.spins, obs_map)
             psi_s = self.call_forward(self.spins, alpha)
             psi_sp_o = self.call_forward_sp(sp_o, alpha)

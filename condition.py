@@ -128,7 +128,6 @@ class init_scalar_prod(Condition):
         alpha_init[:, :, 0] = self.init_t
         if self.psi_s_init_target is None:
             self.psi_s_init_target = self.psi_init(spins).unsqueeze(2)
-            print(self.psi_s_init_target.shape)
         psi_s_init = model.call_forward(spins, alpha_init)
         psi_s_init_target_sum = (torch.abs(self.psi_s_init_target)**2).sum(1)
         psi_s_init_sum = (torch.abs(psi_s_init)**2).sum(1)

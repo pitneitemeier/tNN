@@ -171,8 +171,8 @@ class multConvModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        lr_scheduler = self.scheduler(optimizer)
-        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
+        #lr_scheduler = self.scheduler(optimizer, patience=0)
+        return {'optimizer': optimizer}#, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
 
 
 @tNN.wave_function
@@ -233,19 +233,19 @@ class tryout(pl.LightningModule):
         self.lattice_sites = lattice_sites
         self.lr = learning_rate
         self.opt = torch.optim.Adam
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
         conv_out = 32 * (lattice_sites)
         mult_size = 256
         self.lattice_net = nn.Sequential(
             nn.Conv1d(1, 16, kernel_size=2, padding=1, padding_mode='circular'),
             nn.CELU(),
-            nn.Conv1d(16, 32, kernel_size=2, padding=0),
+            nn.Conv1d(16, 32, kernel_size=2),
             nn.CELU(),
             nn.Flatten(start_dim=1, end_dim=-1),
             nn.Linear(conv_out, mult_size),
-            #nn.CELU()
         )
 
-        tNN_hidden = 256
+        tNN_hidden = 128
         self.tNN = nn.Sequential(
             nn.Linear(1 + num_h_params, 64),
             nn.CELU(),
@@ -254,17 +254,19 @@ class tryout(pl.LightningModule):
             nn.Linear(tNN_hidden, tNN_hidden),
             nn.CELU(),
             nn.Linear(tNN_hidden, mult_size),
-            #nn.CELU()
         )
-
-        psi_hidden = int( mult_size / 2 )
+        after_act = int( mult_size / 2 )
+        psi_hidden = 128
         psi_type = torch.complex64
         self.psi = nn.Sequential(
-            nn.Linear(mult_size, mult_size),
             act.rad_phase_act(),
+            nn.Linear( after_act, psi_hidden, dtype=psi_type),
+            act.complex_celu(),
             nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
             act.complex_celu(),
-            nn.Linear( psi_hidden, 1, dtype=psi_type),
+            nn.Linear( psi_hidden, 64, dtype=psi_type),
+            act.complex_celu(),
+            nn.Linear( 64, 1, dtype=psi_type),
         )
 
     def forward(self, spins, alpha):
@@ -274,4 +276,6 @@ class tryout(pl.LightningModule):
         return psi_out
 
     def configure_optimizers(self):
-        return self.opt(self.parameters(), lr=self.lr)
+        optimizer = self.opt(self.parameters(), lr=self.lr)
+        lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True)
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}

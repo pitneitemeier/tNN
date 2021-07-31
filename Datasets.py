@@ -10,8 +10,8 @@ class Train_Data(Dataset):
         self.h_param_range = h_param_range
         
     def __len__(self):
-        #just setting 100000 as dataset size to get 100000 alphas for one epoch
-        return 1000000
+        #just setting fixed epoch len to define the interval for validation and lr scheduling
+        return 20000
 
     def __getitem__(self, index):
         '''
@@ -44,7 +44,7 @@ class Train_Data(Dataset):
 
 class Val_Data(Dataset):
     def __init__(self, t_arr, h_params):
-        self.t_arr = torch.from_numpy(t_arr).reshape(t_arr.shape[0], t_arr.shape[1], 1, 1).type(torch.get_default_dtype())
+        self.t_arr = torch.from_numpy(t_arr).reshape(-1, 1, 1).type(torch.get_default_dtype())
         self.h_params = torch.from_numpy(h_params).type(torch.get_default_dtype())
         
     def __len__(self):
@@ -52,11 +52,8 @@ class Val_Data(Dataset):
         return self.h_params.shape[0]
 
     def __getitem__(self, index):
-        t_arr = self.t_arr[index, :, :, :]
-        h_params = self.h_params[index,:].reshape(1, 1, -1).repeat(t_arr.shape[0], 1, 1)
-        #print('repeated t_arr shape ',t_arr.shape)
-        #print('repeated_ext shape ', ext_params.shape)
-        alpha = torch.cat((t_arr, h_params), dim=2)
+        h_params = self.h_params[index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
+        alpha = torch.cat((self.t_arr, h_params), dim=2)
         return alpha
 
 
