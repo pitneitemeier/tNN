@@ -46,9 +46,9 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
-    init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
+    init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=25)
     #init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=1000)
-    norm = cond.Norm(weight=5, norm_target=1)
+    norm = cond.Norm(weight=10, norm_target=1)
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, '', 'Mean_X_Magnetization')
     
     ### universal seed for deterministic behaviour
@@ -64,7 +64,7 @@ if __name__=='__main__':
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_4-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
     
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=15, 
+    trainer = pl.Trainer(fast_dev_run=True, gpus=1, max_epochs=15, 
         auto_select_gpus=True, gradient_clip_val=0.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=5)

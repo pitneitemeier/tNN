@@ -11,7 +11,7 @@ import Datasets
 
 
 class Environment(LightningDataModule):
-    def __init__(self, condition_list, h_param_range, val_condition_list, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0):
+    def __init__(self, condition_list, h_param_range, val_condition_list, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0, epoch_len=100000):
         super().__init__()
         self.condition_list = condition_list
         self.val_condition_list = val_condition_list
@@ -21,9 +21,10 @@ class Environment(LightningDataModule):
         self.val_h_params = val_h_params
         self.val_t_arr = val_t_arr
         self.num_workers = num_workers
+        self.epoch_len = epoch_len
 
     def setup(self, stage: Optional[str] = None):
-        self.train_data = Datasets.Train_Data(self.h_param_range)
+        self.train_data = Datasets.Train_Data(self.h_param_range, self.epoch_len)
         self.val_data = Datasets.Val_Data(self.val_t_arr, self.val_h_params)
 
     def train_dataloader(self):

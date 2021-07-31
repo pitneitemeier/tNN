@@ -6,12 +6,12 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, h_param_range=None):
+    def __init__(self, h_param_range=None, epoch_len=100000):
         self.h_param_range = h_param_range
-        
-    def __len__(self):
         #just setting fixed epoch len to define the interval for validation and lr scheduling
-        return 20000
+        self.epoch_len = epoch_len
+    def __len__(self):
+        return self.epoch_len
 
     def __getitem__(self, index):
         '''
