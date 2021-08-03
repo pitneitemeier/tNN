@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+torch.set_default_dtype(torch.float64)
 
 def e_i(index, size):
   arr = torch.zeros(size, dtype=torch.complex128)
@@ -51,7 +52,7 @@ def get_diag_hamiltonian_TFI(h_param, lattice_sites):
     H += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+1) % n, n) + h_param * sigma_i(sig_x, i, n))
 
   #diagonalizing Hamiltonian
-  w, v = torch.linalg.eig(H)
+  w, v = torch.linalg.eigh(H)
   return w, v, h_param
 
 def get_mean_magn_op(lattice_sites, base_op):
@@ -76,15 +77,11 @@ def get_diag_hamiltonian_TFI(h_param, lattice_sites):
   h_param = torch.full((1,), h_param, requires_grad=True)
   size = np.power(2,n)
   H = torch.zeros((size, size), dtype=torch.complex128)
-  corr_z1_op = torch.zeros((size, size), dtype=torch.complex128)
-  corr_z2_op = torch.zeros((size, size), dtype=torch.complex128)
   for i in range(n):
     H += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+1) % n, n) + h_param * sigma_i(sig_x, i, n))
-    corr_z1_op += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+1) % n, n)) / n
-    corr_z2_op += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+2) % n, n)) / n 
 
   #diagonalizing Hamiltonian
-  w, v = torch.linalg.eig(H)
+  w, v = torch.linalg.eigh(H)
   return w, v, h_param
 
 def get_init_state_kron(psi_init, lattice_sites):
@@ -109,14 +106,14 @@ import matplotlib.pyplot as plt
 
 def plot_res(t_arr, magn, susc):
   fig, ax = plt.subplots(figsize=(10,10))
-  ax.plot(t_arr, magn, label = 'magnetization')
-  ax.plot(t_arr, susc, label = 'susceptibility')
+  ax.plot(t_arr, magn, label = 'magnetization', c='C0')
+  ax.plot(t_arr, susc*0, label = 'susceptibility', c='C1')
   ax.legend()
   #ax.plot(data[:, 0], data[:, 1], c="red", label=r"Transverse magnetization $\langle X\rangle$", ls='--')
   fig.savefig('ED_res.png')
 
-lattice_sites = 4
-res_folder = 'ED_data/TFI4x/'
+lattice_sites = 6
+res_folder = f'ED_data/TFI{lattice_sites}x/'
 psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
 #psi_init = e_i(0,2)
 psi_init = get_init_state_kron(psi_init, lattice_sites)
@@ -134,6 +131,10 @@ for h_param in h_param_list:
   magn_list.append(magn)
   susc_list.append(susc)
   corr_list.append(corr)
+#plot_res(t_arr, magn_list[1], susc_list[1])
+#print(susc_list)
+
+
 np.savetxt(res_folder + 'ED_magn_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', np.stack(magn_list), delimiter=',')
 np.savetxt(res_folder + 'ED_susc_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', np.stack(susc_list), delimiter=',')
 corr_stack = np.stack(corr_list)

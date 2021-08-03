@@ -107,7 +107,7 @@ class mod_relu(nn.Module):
 
 
 def apply_complex(fr, fi, input, dtype = torch.complex64):
-    return (fr(input.real)-fi(input.imag)).type(dtype) + 1j*(fr(input.imag)+fi(input.real)).type(dtype)
+    return (fr(torch.real(input))-fi(torch.imag(input))) + 1j*(fr(torch.imag(input))+fi(torch.real(input)))
 
 class ComplexConv1d(nn.Module):
     def __init__(self,in_channels, out_channels, kernel_size=3, stride=1, padding = 0,
@@ -118,3 +118,12 @@ class ComplexConv1d(nn.Module):
         
     def forward(self,input):    
         return apply_complex(self.conv_r, self.conv_i, input)
+
+class ComplexLinear(nn.Module):
+    def __init__(self,in_features, out_features, bias=True, device=None, dtype=None):
+        super().__init__()
+        self.lin_r = nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype)
+        self.lin_i = nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype)
+        
+    def forward(self,input):    
+        return apply_complex(self.lin_r, self.lin_i, input)
