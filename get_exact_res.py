@@ -122,7 +122,8 @@ psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
 psi_init = get_init_state_kron(psi_init, lattice_sites)
 magn_op = get_mean_magn_op(lattice_sites, sig_x)
 corr_op_list = [get_mean_corr_op(lattice_sites, sig_z, d + 1) for d in range(int(lattice_sites/2))]
-h_param_list = [0.2, 0.5, 0.7, 1., 1.3]
+#h_param_list = [0.2, 0.5, 0.7, 1., 1.3]
+h_param_list = [0.9, 1., 1.1]
 #h_param_list = [0.2]
 magn_list = []
 susc_list = []
@@ -143,4 +144,6 @@ np.savetxt(res_folder + 't_arr_' + f'{np.min(h_param_list)}_{np.max(h_param_list
 np.savetxt(res_folder + 'h_params_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', h_param_list)
 
 
-
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+a = torch.tensor([1,2,3,4])
+a = a.to('cuda')

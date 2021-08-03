@@ -28,6 +28,8 @@ class Operator:
       print('multiplication for this type nyi')
       return self
 
+  def __rmul__(self, other):
+    return self.__mul__(other)
 
   def __add__(self, other):
     if isinstance(other, Operator):
@@ -46,6 +48,9 @@ class Operator:
     else:
       print('add for this type nyi')
       return self
+
+  def __radd__(self, other):
+    return self.__add__(other)
   
 
 
