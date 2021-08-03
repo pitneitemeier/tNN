@@ -12,7 +12,6 @@ import tNN
 import utils
 import example_operators as ex_op
 import models
-torch.backends.cudnn.enabled = False
 torch.set_default_dtype(torch.float32)
 
 def psi_init(spins):
@@ -57,7 +56,7 @@ if __name__=='__main__':
     
     env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=100, epoch_len=2e5, 
         val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=24)
-    model = models.tryout(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    model = models.multConv2(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint

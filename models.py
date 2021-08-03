@@ -278,7 +278,7 @@ class multConv2(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True)
+        lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True, factor=.5)
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
 
 

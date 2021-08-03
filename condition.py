@@ -6,6 +6,7 @@ from abc import ABC, abstractclassmethod
 class Condition(ABC):
     def __init__(self, weight):
         self.weight = weight
+        self.device = 'cpu'
 
     @abstractclassmethod
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
@@ -23,7 +24,7 @@ class Condition(ABC):
 
 class Val_Condition(ABC):
     def __init__(self):
-        pass
+        self.device = 'cpu'
 
     @abstractclassmethod
     def __call__(self, model, spins, alpha):
@@ -53,6 +54,7 @@ class schrodinger_eq(Condition):
         self.h_map = self.h_map.to(device)
         self.h_mat = self.h_mat.to(device)
         self.h_mult = self.h_mult.to(device)
+        self.device = device
     
     def __str__(self):
         return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
@@ -65,6 +67,8 @@ class schrodinger_eq(Condition):
             current_ind += self.num_op_h_list[i+1]
     
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
+        if not (model.device == self.device):
+            self.to(model.device)
         sp_h = utils.get_sp(spins, self.h_map)
         psi_sp_h = model.call_forward_sp(sp_h, alpha)
         self.update_h_mult(alpha)
@@ -91,11 +95,14 @@ class init_observable(Condition):
     def to(self, device):
         self.obs_map = self.obs_map.to(device)
         self.obs_mat = self.obs_mat.to(device)
+        self.device = device
     
     def __str__(self):
         return f"{self.name} inital condition for {self.lattice_sites} lattice sites \n"
 
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
+        if not (model.device == self.device):
+            self.to(model.device)
         alpha_init = alpha.detach().clone()
         alpha_init[:, :, 0] = self.init_t
         psi_s_init = model.call_forward(spins, alpha_init)
@@ -118,12 +125,14 @@ class init_scalar_prod(Condition):
         self.psi_s_init_target = None
 
     def to(self, device):
-        pass
+        self.device = device
 
     def __str__(self):
         return f'{self.name} initial condition via scalar prod'
 
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
+        if not (model.device == self.device):
+            self.to(model.device)
         alpha_init = alpha.detach().clone()
         alpha_init[:, :, 0] = self.init_t
         if self.psi_s_init_target is None:
@@ -142,12 +151,14 @@ class Norm(Condition):
         self.name='Norm'
     
     def to(self, device):
-        pass
+        self.device = device
     
     def __str__(self):
         return f'Norm_target = {self.norm_target}'
 
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
+        if not (model.device == self.device):
+            self.to(model.device)
         batched_norm = utils.psi_norm(psi_s)
         norm_loss = torch.mean( (batched_norm - self.norm_target) ** 2 )
         return self.weight * norm_loss
@@ -168,11 +179,14 @@ class ED_Validation(Val_Condition):
         self.ED_data = self.ED_data.to(device)
         self.obs_map = self.obs_map.to(device)
         self.obs_mat = self.obs_mat.to(device)
+        self.device = device
 
     def __str__(self):
         return f'Condition to match ED_data'
 
     def __call__(self, model, spins, alpha, val_set_ind):
+        if not (model.device == self.device):
+            self.to(model.device)
         if (val_set_ind == 0):
             self.h_param = self.h_param.new_zeros(self.h_param.shape[0], alpha.shape[2] - 1)
         self.h_param[val_set_ind, :] = alpha[0, 0, 1:]

@@ -15,6 +15,7 @@ class Environment(LightningDataModule):
         super().__init__()
         self.condition_list = condition_list
         self.val_condition_list = val_condition_list
+        
         self.h_param_range = h_param_range
         self.t_range = t_range
         self.batch_size = batch_size
@@ -26,6 +27,14 @@ class Environment(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         self.train_data = Datasets.Train_Data(self.h_param_range, self.epoch_len)
         self.val_data = Datasets.Val_Data(self.val_t_arr, self.val_h_params)
+        '''
+        if self.trainer is not None:
+            print(f'moving conditions to {self.device}')
+            for condition in self.condition_list:
+                condition.to(self.trainer.model.device)
+            for val_condition in self.val_condition_list:
+                val_condition.to(self.trainer.model.device)
+        '''
 
     def train_dataloader(self):
         return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
@@ -38,7 +47,8 @@ def wave_function(Model):
     class wave_fun(Model):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.spins = utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype())
+            #self.spins = utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype())
+            self.register_buffer('spins', utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype()))
             self.save_hyperparameters()
     
         def call_forward(self, spins, alpha):
@@ -149,7 +159,7 @@ def wave_function(Model):
             psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
             observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
             return torch.real(observable)
-
+        '''
         def to(self, device):
             print(f'moving model to {device}')
             if self.trainer is not None:
@@ -157,8 +167,9 @@ def wave_function(Model):
                     condition.to(device)
                 for val_condition in self.trainer.datamodule.val_condition_list:
                     val_condition.to(device)
-            self.spins = self.spins.to(device)
+            #self.spins = self.spins.to(device)
             return super().to(device)
+        '''
   
     return wave_fun
 
