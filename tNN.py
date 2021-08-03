@@ -27,14 +27,6 @@ class Environment(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         self.train_data = Datasets.Train_Data(self.h_param_range, self.epoch_len)
         self.val_data = Datasets.Val_Data(self.val_t_arr, self.val_h_params)
-        '''
-        if self.trainer is not None:
-            print(f'moving conditions to {self.device}')
-            for condition in self.condition_list:
-                condition.to(self.trainer.model.device)
-            for val_condition in self.val_condition_list:
-                val_condition.to(self.trainer.model.device)
-        '''
 
     def train_dataloader(self):
         return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
@@ -157,7 +149,7 @@ def wave_function(Model):
             o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, self.spins)
             psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
             psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-            observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
+            observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
             return torch.real(observable)
         '''
         def to(self, device):

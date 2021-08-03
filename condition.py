@@ -111,7 +111,7 @@ class init_observable(Condition):
         obs_loc = utils.calc_Oloc(psi_sp_obs, self.obs_mat, spins)
         psi_s_init_sq_sum = (torch.abs(psi_s_init)**2).sum(1)
         psi_init_obs_loc_sum = (torch.conj(psi_s_init) * obs_loc).sum(1)
-        init_cond_loss = torch.mean( (torch.abs( (psi_init_obs_loc_sum / psi_s_init_sq_sum) - self.init_value)) ** 2 )
+        init_cond_loss = torch.mean( (torch.abs( (psi_init_obs_loc_sum * (1 / psi_s_init_sq_sum)) - self.init_value)) ** 2 )
         return self.weight * init_cond_loss
 
 
