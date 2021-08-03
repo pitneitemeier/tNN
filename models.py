@@ -3,6 +3,7 @@ import activations as act
 import torch
 from torch import nn
 import pytorch_lightning as pl
+import math
 
 @tNN.wave_function
 class simpleModel(pl.LightningModule):
@@ -278,7 +279,7 @@ class multConv2(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
         lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True)
-        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
 
 
 @tNN.wave_function
@@ -289,17 +290,15 @@ class tryout(pl.LightningModule):
         self.lr = learning_rate
         self.opt = torch.optim.Adam
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
-        conv_out = 32 * (lattice_sites)
-        mult_size = 256
+        self.lat_out_shape = (-1, 32, (lattice_sites + 3))
+        mult_size = 32 * (lattice_sites + 3)
         self.lattice_net = nn.Sequential(
             nn.Conv1d(1, 16, kernel_size=2, padding=1, padding_mode='circular'),
             nn.CELU(),
-            nn.Conv1d(16, 32, kernel_size=2),
+            nn.Conv1d(16, 32, kernel_size=2, padding=1),
             nn.CELU(),
-            nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(conv_out, mult_size),
+            nn.Conv1d(32, 32, kernel_size=2, padding=1),
         )
-
         tNN_hidden = 128
         self.tNN = nn.Sequential(
             nn.Linear(1 + num_h_params, 64),
@@ -314,20 +313,25 @@ class tryout(pl.LightningModule):
         psi_hidden = 128
         psi_type = torch.complex64
         self.psi = nn.Sequential(
-            act.rad_phase_act(),
-            nn.Linear( after_act, psi_hidden, dtype=psi_type),
+            act.rad_phase_conv_act(),
+            act.ComplexConv1d(int(self.lat_out_shape[1]/2), 32, kernel_size=2, padding=1),
             act.complex_celu(),
-            nn.Linear( psi_hidden, psi_hidden, dtype=psi_type),
+            act.ComplexConv1d(32 , 32, kernel_size=2, padding=1),
             act.complex_celu(),
-            nn.Linear( psi_hidden, 64, dtype=psi_type),
+            act.ComplexConv1d(32 , 32, kernel_size=2, padding=1),
             act.complex_celu(),
-            nn.Linear( 64, 1, dtype=psi_type),
+            nn.Flatten(start_dim=1, end_dim=-1),
+            nn.Linear(32 * (lattice_sites + 6), 1, dtype=psi_type)
         )
 
     def forward(self, spins, alpha):
         lat_out = self.lattice_net(spins.unsqueeze(1))
-        t_out = self.tNN(alpha)
+        t_out = self.tNN(alpha).unsqueeze(2)
+        #print('lat_out, t_out shape', lat_out.shape, t_out.shape)
+        t_out = t_out.reshape(self.lat_out_shape)
+        #print('lat_out, t_out shape', lat_out.shape, t_out.shape)
         psi_out = self.psi( (t_out * lat_out) )
+        #print('psi_out_shape', psi_out.shape)
         return psi_out
 
     def configure_optimizers(self):

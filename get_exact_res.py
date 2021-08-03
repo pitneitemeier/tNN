@@ -115,8 +115,8 @@ def plot_res(t_arr, magn, susc):
   #ax.plot(data[:, 0], data[:, 1], c="red", label=r"Transverse magnetization $\langle X\rangle$", ls='--')
   fig.savefig('ED_res.png')
 
-lattice_sites = 8
-res_folder = 'ED_data/TFI8x/'
+lattice_sites = 4
+res_folder = 'ED_data/TFI4x/'
 psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
 #psi_init = e_i(0,2)
 psi_init = get_init_state_kron(psi_init, lattice_sites)
@@ -142,8 +142,3 @@ corr_stack = corr_stack.reshape(corr_stack.shape[0], -1)
 np.savetxt(res_folder + 'ED_corr_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', corr_stack, delimiter=',')
 np.savetxt(res_folder + 't_arr_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', t_arr, delimiter=',')
 np.savetxt(res_folder + 'h_params_' + f'{np.min(h_param_list)}_{np.max(h_param_list)}' + '.csv', h_param_list)
-
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-a = torch.tensor([1,2,3,4])
-a = a.to('cuda')
