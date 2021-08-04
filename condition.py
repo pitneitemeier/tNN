@@ -74,11 +74,11 @@ class schrodinger_eq(Condition):
         self.update_h_mult(alpha)
         h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, spins, self.h_mult)
         dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
-        h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
-        dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
+        h_loc_sq_sum = (utils.abs_sq(h_loc)).sum(1)
+        dt_psi_sq_sum = (utils.abs_sq(dt_psi_s)).sum(1)
         dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-        schroedinger_loss = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ))
-        #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
+        #schroedinger_loss = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ))
+        schroedinger_loss = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) )
         return self.weight * schroedinger_loss
         
 
@@ -109,9 +109,9 @@ class init_observable(Condition):
         sp_obs = utils.get_sp(spins, self.obs_map)
         psi_sp_obs = model.call_forward_sp(sp_obs, alpha_init)
         obs_loc = utils.calc_Oloc(psi_sp_obs, self.obs_mat, spins)
-        psi_s_init_sq_sum = (torch.abs(psi_s_init)**2).sum(1)
+        psi_s_init_sq_sum = (utils.abs_sq(psi_s_init)).sum(1)
         psi_init_obs_loc_sum = (torch.conj(psi_s_init) * obs_loc).sum(1)
-        init_cond_loss = torch.mean( (torch.abs( (psi_init_obs_loc_sum * (1 / psi_s_init_sq_sum)) - self.init_value)) ** 2 )
+        init_cond_loss = torch.mean( (utils.abs_sq( (psi_init_obs_loc_sum * (1 / psi_s_init_sq_sum)) - self.init_value)) )
         return self.weight * init_cond_loss
 
 
@@ -138,10 +138,10 @@ class init_scalar_prod(Condition):
         if self.psi_s_init_target is None:
             self.psi_s_init_target = self.psi_init(spins).unsqueeze(2)
         psi_s_init = model.call_forward(spins, alpha_init)
-        psi_s_init_target_sum = (torch.abs(self.psi_s_init_target)**2).sum(1)
-        psi_s_init_sum = (torch.abs(psi_s_init)**2).sum(1)
+        psi_s_init_target_sum = ( utils.abs_sq(self.psi_s_init_target) ).sum(1)
+        psi_s_init_sum = ( utils.abs_sq(psi_s_init) ).sum(1)
         psi_s_init_psi_s_target_sum = (torch.conj(psi_s_init) * self.psi_s_init_target).sum(1) 
-        init_cond = torch.mean( torch.abs( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) ** 2)
+        init_cond = torch.mean( utils.abs_sq( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) )
         return self.weight * init_cond
 
 class Norm(Condition):
@@ -159,8 +159,8 @@ class Norm(Condition):
     def __call__(self, model, psi_s, spins, alpha, loss_weight):
         if not (model.device == self.device):
             self.to(model.device)
-        batched_norm = utils.psi_norm(psi_s)
-        norm_loss = torch.mean( (batched_norm - self.norm_target) ** 2 )
+        batched_norm = utils.psi_norm_sq(psi_s)
+        norm_loss = torch.mean( (batched_norm - self.norm_target**2) ** 2 )
         return self.weight * norm_loss
 
 class ED_Validation(Val_Condition):

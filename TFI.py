@@ -20,7 +20,7 @@ def psi_init(spins):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 6
+    lattice_sites = 4
     
     h1 = []
     for l in range(lattice_sites):
@@ -36,15 +36,15 @@ if __name__=='__main__':
     corr_list = [ex_op.avg_correlation(op.Sz, d+1, lattice_sites) for d in range(int(lattice_sites/2))]
 
     ### loading ED Data for Validation
-    folder = 'ED_data/TFI6x/'
-    append = '_0.9_1.1.csv'
+    folder = 'ED_data/TFI4x/'
+    append = '_0.2_1.3.csv'
     val_h_params = np.loadtxt(folder + 'h_params' + append, delimiter=',')
     val_t_arr = np.loadtxt(folder + 't_arr' + append, delimiter=',')
     print(val_h_params)
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
     ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
-    h_param_range = [(0.8, 1.2)]
+    h_param_range = [(0.15, 1.35)]
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
@@ -58,14 +58,14 @@ if __name__=='__main__':
     
     env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=50, epoch_len=2e5, 
         val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=24)
-    model = models.multConvDeep(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    model = models.tryout(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_8-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
     
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=1,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=5,
         auto_select_gpus=False, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=True, progress_bar_refresh_rate=5,

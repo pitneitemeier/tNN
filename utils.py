@@ -156,7 +156,7 @@ def calc_dt_psi(psi_s, alpha):
   return dt_psi_s.unsqueeze(2)
 
 
-def psi_norm(psi_s):
+def psi_norm_sq(psi_s):
   '''
   Returns the Norm of a Wave function batch wise
   Parameters
@@ -169,13 +169,13 @@ def psi_norm(psi_s):
   norm : tensor
     shape = (num_alpha, 1)  
   '''
-  return (torch.abs(psi_s)**2).sum(1)
+  return (abs_sq(psi_s)).sum(1)
 
 def val_loss(psi_s, o_loc, o_target):
-  psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
+  psi_sq_sum = (abs_sq(psi_s)).sum(1)
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
   observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
-  loss = (torch.abs((observable - o_target)) ** 2).sum(0)
+  loss = (abs_sq((observable - o_target))).sum(0)
   return loss, torch.real(observable)
 
 
@@ -290,3 +290,6 @@ def plot_results(name, model, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn
   tot_ax.legend()
   tot_fig.savefig(plot_folder + tot_title + '.png')
   model.to('cpu')
+
+def abs_sq(x):
+  return x.real**2 + x.imag**2

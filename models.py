@@ -286,61 +286,89 @@ class multConv2(tNN.Wave_Fun):
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
 
 
-@tNN.wave_function
-class tryout(pl.LightningModule):
+
+class tryout(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
-        super().__init__()
+        super().__init__(lattice_sites = lattice_sites)
         self.lattice_sites = lattice_sites
         self.lr = learning_rate
         self.opt = torch.optim.Adam
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
-        self.lat_out_shape = (-1, 32, (lattice_sites + 3))
-        mult_size = 32 * (lattice_sites + 3)
+        conv_out = 32 * ((self.lattice_sites - 2 + 2) + 2 * 1)
+        mult_size = 512
         self.lattice_net = nn.Sequential(
             nn.Conv1d(1, 16, kernel_size=2, padding=1, padding_mode='circular'),
             nn.CELU(),
-            nn.Conv1d(16, 32, kernel_size=2, padding=1),
+            nn.Conv1d(16, 32, kernel_size=2, padding=1, padding_mode='zeros'),
             nn.CELU(),
-            nn.Conv1d(32, 32, kernel_size=2, padding=1),
+            nn.Flatten(start_dim=1, end_dim=-1),
+            nn.Linear(conv_out, mult_size),
         )
-        tNN_hidden = 128
-        self.tNN = nn.Sequential(
-            nn.Linear(1 + num_h_params, 64),
+
+        tNN_hidden = 64
+        self.tNN_first = nn.Sequential(
+            nn.Linear(1 + num_h_params, tNN_hidden),
             nn.CELU(),
-            nn.Linear(64, tNN_hidden),
+        )
+        self.tNN_hidden1 = nn.Sequential(
+            nn.Linear(tNN_hidden, tNN_hidden),
             nn.CELU(),
             nn.Linear(tNN_hidden, tNN_hidden),
             nn.CELU(),
-            nn.Linear(tNN_hidden, mult_size),
         )
+        self.tNN_hidden2 = nn.Sequential(
+            nn.Linear( tNN_hidden, tNN_hidden),
+            nn.CELU(),
+            nn.Linear(tNN_hidden, tNN_hidden),
+            nn.CELU(),
+        )
+
+        self.tNN_last = nn.Sequential(
+            nn.Linear( tNN_hidden, mult_size),
+        )
+
         after_act = int( mult_size / 2 )
-        psi_hidden = 128
-        psi_type = torch.complex64
-        self.psi = nn.Sequential(
-            act.rad_phase_conv_act(),
-            act.ComplexConv1d(int(self.lat_out_shape[1]/2), 32, kernel_size=2, padding=1),
+        psi_hidden = 64
+        self.psi_first = nn.Sequential(
+            act.rad_phase_act(),
+            act.ComplexLinear( after_act, psi_hidden),
             act.complex_celu(),
-            act.ComplexConv1d(32 , 32, kernel_size=2, padding=1),
+        )
+        self.psi_hidden1 = nn.Sequential(
+            act.ComplexLinear( psi_hidden, psi_hidden),
             act.complex_celu(),
-            act.ComplexConv1d(32 , 32, kernel_size=2, padding=1),
+            act.ComplexLinear( psi_hidden, psi_hidden),
             act.complex_celu(),
-            nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(32 * (lattice_sites + 6), 1, dtype=psi_type)
+        )            
+        self.psi_hidden2 = nn.Sequential(
+            act.ComplexLinear( psi_hidden, psi_hidden),
+            act.complex_celu(),
+            act.ComplexLinear( psi_hidden, psi_hidden),
+            act.complex_celu(),
+        )
+        self.psi_last = nn.Sequential(
+            act.ComplexLinear( psi_hidden, 1),
         )
 
     def forward(self, spins, alpha):
         lat_out = self.lattice_net(spins.unsqueeze(1))
-        t_out = self.tNN(alpha).unsqueeze(2)
-        #print('lat_out, t_out shape', lat_out.shape, t_out.shape)
-        t_out = t_out.reshape(self.lat_out_shape)
-        #print('lat_out, t_out shape', lat_out.shape, t_out.shape)
-        psi_out = self.psi( (t_out * lat_out) )
-        #print('psi_out_shape', psi_out.shape)
+        t0 = self.tNN_first(alpha)
+        t1 = self.tNN_hidden1(t0)
+        #t2 = self.tNN_hidden2(torch.cat((t0, t1), dim=1))
+        t2 = self.tNN_hidden2(t0 + t1)
+        #t_out = self.tNN_last(torch.cat((t0, t1, t2), dim=1))
+        t_out = self.tNN_last(t1 + t2)
+        psi_0 = self.psi_first( t_out * lat_out )
+        psi_1 = self.psi_hidden1( psi_0 )
+        #psi_2 = self.psi_hidden2( torch.cat((psi_0, psi_1), dim=1) )
+        psi_2 = self.psi_hidden2( psi_0 + psi_1 )
+        #psi_out = self.psi_last( torch.cat((psi_0, psi_1, psi_2), dim=1) )
+        psi_out = self.psi_last( psi_1 + psi_2 )
         return psi_out
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True, factor=.5)
+        lr_scheduler = self.scheduler(optimizer, patience=1, verbose=True, factor=.5)
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
 
 class multConvDeep(tNN.Wave_Fun):
