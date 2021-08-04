@@ -141,7 +141,7 @@ class init_scalar_prod(Condition):
         psi_s_init_target_sum = ( torch.abs(self.psi_s_init_target)**2 ).sum(1)
         psi_s_init_sum = ( utils.abs_sq(psi_s_init) ).sum(1)
         psi_s_init_psi_s_target_sum = (torch.conj(psi_s_init) * self.psi_s_init_target).sum(1) 
-        init_cond = torch.mean( utils.abs_sq( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) )
+        init_cond = torch.mean( torch.abs( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) )
         return self.weight * init_cond
 
 class Norm(Condition):
