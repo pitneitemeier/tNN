@@ -138,7 +138,7 @@ class init_scalar_prod(Condition):
         if self.psi_s_init_target is None:
             self.psi_s_init_target = self.psi_init(spins).unsqueeze(2)
         psi_s_init = model.call_forward(spins, alpha_init)
-        psi_s_init_target_sum = ( utils.abs_sq(self.psi_s_init_target) ).sum(1)
+        psi_s_init_target_sum = ( torch.abs(self.psi_s_init_target)**2 ).sum(1)
         psi_s_init_sum = ( utils.abs_sq(psi_s_init) ).sum(1)
         psi_s_init_psi_s_target_sum = (torch.conj(psi_s_init) * self.psi_s_init_target).sum(1) 
         init_cond = torch.mean( utils.abs_sq( psi_s_init_sum + psi_s_init_target_sum - 2 * torch.real( psi_s_init_psi_s_target_sum ) ) )

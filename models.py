@@ -231,6 +231,7 @@ class realModel(pl.LightningModule):
 class multConv2(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
         super().__init__(lattice_sites = lattice_sites)
+        self.save_hyperparameters()
         self.lattice_sites = lattice_sites
         self.lr = learning_rate
         self.opt = torch.optim.Adam
@@ -290,6 +291,7 @@ class multConv2(tNN.Wave_Fun):
 class tryout(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
         super().__init__(lattice_sites = lattice_sites)
+        self.save_hyperparameters()
         self.lattice_sites = lattice_sites
         self.lr = learning_rate
         self.opt = torch.optim.Adam
