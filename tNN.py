@@ -171,7 +171,6 @@ class Wave_Fun(LightningModule):
         super().__init__()
         self.lattice_sites = lattice_sites
         self.register_buffer('spins', utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype()))
-        self.save_hyperparameters()
 
     def call_forward(self, spins, alpha):
         '''

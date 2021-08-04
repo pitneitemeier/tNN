@@ -199,7 +199,7 @@ def get_susceptibility(magnetization, alpha):
 
 import matplotlib.pyplot as plt
 def plot_results(name, model, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr, plot_folder):
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
   model = model.to(device)
   assert(h_param_arr.shape[0] == ED_magn_arr.shape[0] == ED_susc_arr.shape[0] == ED_corr_arr.shape[0])
   t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
