@@ -5,16 +5,17 @@ from torch.utils.data import DataLoader
 import torch
 import utils
 import Datasets
-
+import matplotlib.pyplot as plt
+from collections import Sequence
 #TODO 
 #documentation
 
 
 class Environment(LightningDataModule):
-    def __init__(self, condition_list, h_param_range, val_condition_list, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0, epoch_len=100000):
+    def __init__(self, condition_list, h_param_range, val_condition, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0, epoch_len=100000):
         super().__init__()
         self.condition_list = condition_list
-        self.val_condition_list = val_condition_list
+        self.val_condition = val_condition
         
         self.h_param_range = h_param_range
         self.t_range = t_range
@@ -26,7 +27,7 @@ class Environment(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         self.train_data = Datasets.Train_Data(self.h_param_range, self.epoch_len)
-        self.val_data = Datasets.Val_Data(self.val_t_arr, self.val_h_params)
+        self.val_data = Datasets.Val_Data(self.val_h_params)
 
     def train_dataloader(self):
         return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
@@ -253,20 +254,37 @@ class Wave_Fun(LightningModule):
         #self.log('end_time', t_end, logger=True, prog_bar=True)
         return {'loss' :loss}
 
-    def validation_step(self, alpha, val_set_idx):
-        alpha = alpha[0]
-        loss = torch.zeros(1, device=self.device)
-        for val_condition in self.trainer.datamodule.val_condition_list:
-            loss = loss + val_condition(self, self.spins, alpha, val_set_idx)
-        self.log('val_loss', loss, logger=True, prog_bar=True)
-        return {'val_loss': loss}
+    def validation_step(self, _, val_set_idx):
+        val_dict = self.trainer.datamodule.val_condition(self, self.spins, val_set_idx)
+        return val_dict
     
-    def on_validation_epoch_end(self):
-        for condition in self.trainer.datamodule.val_condition_list:
-            condition.plot_results()
+    def validation_epoch_end(self, outs):
+        outs = self.all_gather(outs)
+        val_loss = 0
+        fig, ax = plt.subplots(figsize=(10,6))
+        ax.set_xlabel('ht')
+        ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
+        tot_title = f'Magnetization for {self.lattice_sites} Spins'
+        ax.set_title(tot_title)
+        dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
+
+        for i, out in enumerate(outs):
+            h_param = out['val_h_param'].cpu()[0]
+            if isinstance(h_param, Sequence):
+                label = f'$h={utils.tensor_to_string(h_param)} h_c$'
+            else:
+                label = f'$h={h_param:.1f} h_c$'
+            ax.plot(out['t_arr'].cpu()[0], out['observable'].cpu()[0], label=label, c=f'C{i}')
+            ax.plot(out['t_arr'].cpu()[0], out['ED_observable'].cpu()[0], c=f'C{i}', ls='--')
+            val_loss += out['val_loss'][0]
+        ax.legend()
+        fig.savefig(tot_title + '.png')
+        plt.close(fig)
+        print('saved_figure', val_loss)
+        self.log('val_loss', val_loss, prog_bar=True)
+        return {'val_loss':val_loss}
         
     def measure_observable(self, alpha, obs, lattice_sites):
-
         alpha = alpha.to(self.device)
         obs_map = utils.get_map(obs, lattice_sites)
         obs_mat = utils.get_total_mat_els(obs, lattice_sites)
