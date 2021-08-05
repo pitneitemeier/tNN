@@ -51,36 +51,31 @@ if __name__=='__main__':
     init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
     #init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=1000)
     norm = cond.Norm(weight=25, norm_target=1)
-    val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, val_t_arr, val_h_params)
+    val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, '', 'Mean_X_Magnetization')
     
     ### universal seed for deterministic behaviour
     #pl.seed_everything(42, workers=True)
     
-
-    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=50, epoch_len=2e3, 
-        val_condition=val_cond, val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=24)
-    model = models.multConvDeep(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
-    #model = models.multConvModel.load_from_checkpoint('tmp.ckpt')
+    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=50, epoch_len=2e5, 
+        val_condition_list=[val_cond], val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=24)
+    #model = models.multConvModel(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    model = models.multConvDeep.load_from_checkpoint('TFI4z_multconvdeep.ckpt')
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_4-{epoch:02d}-{val_loss:.2f}')
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_8-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    '''
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=4,
+    
+    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=10,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=5,
-        )#accelerator='ddp')#, plugins=DDPPlugin(find_unused_parameters=False))
-
-
-    trainer = pl.Trainer(resume_from_checkpoint='TFI4z_multconvdeep4.ckpt', gpus=1, auto_select_gpus=True, callbacks=[lr_monitor, checkpoint_callback],
-        max_epochs=40)
+        accelerator='ddp')#, plugins=DDPPlugin(find_unused_parameters=False))
     trainer.fit(model=model, datamodule=env)
-    trainer.save_checkpoint('TFI4z_multconvdeep5.ckpt')
-    '''
+    trainer.save_checkpoint('TFI4z_multconvdeep1.ckpt')
+
     #trainer = pl.Trainer(resume_from_checkpoint='tmp.ckpt', gpus=1, auto_select_gpus=True)
     #trainer.fit(model, env)
 
-    utils.plot_results('TFI Model', model, obs, corr_list, val_t_arr, val_h_params, ED_magn, ED_susc, ED_corr, 'results/TFI4x/')
+    #utils.plot_results('TFI Model', model, obs, corr_list, val_t_arr, val_h_params, ED_magn, ED_susc, ED_corr, 'results/TFI6x/')
     #print(ED_magn)
