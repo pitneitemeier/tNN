@@ -5,8 +5,8 @@
 #SBATCH --job-name=TFI8x
 #SBATCH --partition=c18g
 #SBATCH --gres=gpu:volta:2
-#SBATCH --time=0-1:00:00
-#SBATCH --output=out/slurmTFI8x.out
+#SBATCH --time=0-7:00:00
+#SBATCH --output=out/slurmTFI8x_1.out
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
 
 module load python/3.9.1
