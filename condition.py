@@ -164,50 +164,39 @@ class Norm(Condition):
         return self.weight * norm_loss
 
 class ED_Validation(Val_Condition):
-    def __init__(self, obs, lattice_sites, ED_data, plot_path, name):
+    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params):
         super().__init__()
-        self.ED_data = torch.from_numpy(ED_data)
-        self.h_param = torch.zeros(self.ED_data.shape[0])
-        self.t_arr = torch.zeros_like(self.ED_data)
+        self.ED_data = torch.from_numpy(ED_data).type(torch.get_default_dtype())
+        self.h_param = torch.from_numpy(val_h_params).type(torch.get_default_dtype())
+        self.t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
         self.obs_mat = utils.get_total_mat_els(obs, lattice_sites)
         self.obs_map = utils.get_map(obs, lattice_sites)
-        self.model_data = torch.zeros_like(self.ED_data)
-        self.plot_path = plot_path
-        self.name = name
 
     def to(self, device):
         self.ED_data = self.ED_data.to(device)
         self.obs_map = self.obs_map.to(device)
         self.obs_mat = self.obs_mat.to(device)
+        self.t_arr = self.t_arr.to(device)
+        self.h_param = self.h_param.to(device)
         self.device = device
 
     def __str__(self):
         return f'Condition to match ED_data'
 
-    def __call__(self, model, spins, alpha, val_set_ind):
+    def __call__(self, model, spins, val_set_index):
         if not (model.device == self.device):
             self.to(model.device)
-        if (val_set_ind == 0):
-            self.h_param = self.h_param.new_zeros(self.h_param.shape[0], alpha.shape[2] - 1)
-        self.h_param[val_set_ind, :] = alpha[0, 0, 1:]
-        self.t_arr[val_set_ind, :] = alpha[:, 0, 0]
-
+        h_params = self.h_param[val_set_index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
+        t_arr = self.t_arr.reshape(-1,1,1)
+        alpha = torch.cat((t_arr, h_params), dim=2)
         psi_s = model.call_forward(spins, alpha)
         sp_o = utils.get_sp(spins, self.obs_map)
         psi_sp_o = model.call_forward_sp(sp_o, alpha)
         o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
         
-        val_loss, self.model_data[val_set_ind, :] = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_ind, :])
-        return val_loss
+        val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
+        print('observable.shape', observable.shape)
+        return {'val_loss': val_loss, 'observable': observable, 
+            'ED_observable': self.ED_data[val_set_index, :], 
+            'val_h_param': self.h_param[val_set_index], 't_arr': self.t_arr}
 
-    def plot_results(self):
-        fig, ax = plt.subplots(figsize=(10,6))
-        for i in range(self.model_data.shape[0]):
-            ax.plot(self.t_arr[i, :], self.ED_data[i, :].cpu(), label=f'target h= ' + utils.tensor_to_string(self.h_param[i,:]), c=f'C{i}', ls='--')
-            ax.plot(self.t_arr[i, :], self.model_data[i, :], label=f'model_pred h= ' + utils.tensor_to_string(self.h_param[i,:]), c=f'C{i}')
-        ax.set_xlabel('ht')
-        ax.set_ylabel('$E\,[\sigma_x]$')
-        ax.legend()
-        ax.set_title(self.name)
-        fig.savefig(self.plot_path+f'{self.name}.png')
-        plt.close(fig)

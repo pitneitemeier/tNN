@@ -43,18 +43,14 @@ class Train_Data(Dataset):
 
 
 class Val_Data(Dataset):
-    def __init__(self, t_arr, h_params):
-        self.t_arr = torch.from_numpy(t_arr).reshape(-1, 1, 1).type(torch.get_default_dtype())
-        self.h_params = torch.from_numpy(h_params).type(torch.get_default_dtype())
+    def __init__(self, val_h_params):
+        self.num_val_h_params = val_h_params.shape[0]
         
     def __len__(self):
-        #just full batch training here with all t
-        return self.h_params.shape[0]
+        return self.num_val_h_params
 
     def __getitem__(self, index):
-        h_params = self.h_params[index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
-        alpha = torch.cat((self.t_arr, h_params), dim=2)
-        return alpha
+        return index
 
 
 
