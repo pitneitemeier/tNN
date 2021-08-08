@@ -195,7 +195,6 @@ class ED_Validation(Val_Condition):
         o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
         
         val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
-        print('observable.shape', observable.shape)
         return {'val_loss': val_loss, 'observable': observable, 
             'ED_observable': self.ED_data[val_set_index, :], 
             'val_h_param': self.h_param[val_set_index], 't_arr': self.t_arr}

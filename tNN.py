@@ -35,7 +35,7 @@ class Environment(LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_data, 1, num_workers=self.num_workers)
 
-
+"""
 def wave_function(Model):
     class wave_fun(Model):
         def __init__(self, *args, **kwargs):
@@ -165,7 +165,7 @@ def wave_function(Model):
         '''
   
     return wave_fun
-
+"""
 
 class Wave_Fun(LightningModule):
     def __init__(self, lattice_sites):
@@ -251,38 +251,48 @@ class Wave_Fun(LightningModule):
             loss = loss + cond_loss
         
         self.log('train_loss', loss, logger=True)
-        #self.log('end_time', t_end, logger=True, prog_bar=True)
         return {'loss' :loss}
 
-    def validation_step(self, _, val_set_idx):
+    def validation_step(self, val_set_idx, _):
+        val_set_idx = int(val_set_idx.item())
         val_dict = self.trainer.datamodule.val_condition(self, self.spins, val_set_idx)
+        self.log('val_loss', val_dict['val_loss'], prog_bar=True)
         return val_dict
     
     def validation_epoch_end(self, outs):
-        outs = self.all_gather(outs)
-        val_loss = 0
+        #outs = self.all_gather(outs)
         fig, ax = plt.subplots(figsize=(10,6))
         ax.set_xlabel('ht')
         ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
         tot_title = f'Magnetization for {self.lattice_sites} Spins'
         ax.set_title(tot_title)
         dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
-
-        for i, out in enumerate(outs):
-            h_param = out['val_h_param'].cpu()[0]
+        i = 0
+        '''
+        for out in outs:
+            for h_param, t_arr, observable, ED_observable in \
+            zip(out['val_h_param'], out['t_arr'], out['observable'], out['ED_observable']):
+                if isinstance(h_param, Sequence):
+                    label = f'$h={utils.tensor_to_string(h_param)} h_c$'
+                else:
+                    label = f'$h={h_param:.1f} h_c$'
+                ax.plot(t_arr.cpu(), observable.cpu(), label=label, c=f'C{i}')
+                ax.plot(t_arr.cpu(), ED_observable.cpu(), c=f'C{i}', ls='--')
+                i+=1
+        '''
+        for out in outs:
+            h_param, t_arr, observable, ED_observable = out['val_h_param'], out['t_arr'], out['observable'], out['ED_observable']
             if isinstance(h_param, Sequence):
                 label = f'$h={utils.tensor_to_string(h_param)} h_c$'
             else:
                 label = f'$h={h_param:.1f} h_c$'
-            ax.plot(out['t_arr'].cpu()[0], out['observable'].cpu()[0], label=label, c=f'C{i}')
-            ax.plot(out['t_arr'].cpu()[0], out['ED_observable'].cpu()[0], c=f'C{i}', ls='--')
-            val_loss += out['val_loss'][0]
+            ax.plot(t_arr.cpu(), observable.cpu(), label=label, c=f'C{i}')
+            ax.plot(t_arr.cpu(), ED_observable.cpu(), c=f'C{i}', ls='--')
+            i+=1
+
         ax.legend()
-        fig.savefig(tot_title + '.png')
+        fig.savefig(tot_title + f'_{self.local_rank}.png')
         plt.close(fig)
-        print('saved_figure', val_loss)
-        self.log('val_loss', val_loss, prog_bar=True)
-        return {'val_loss':val_loss}
         
     def measure_observable(self, alpha, obs, lattice_sites):
         alpha = alpha.to(self.device)

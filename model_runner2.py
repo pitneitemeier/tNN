@@ -14,6 +14,10 @@ import utils
 import example_operators as ex_op
 import models
 
+
+def psi_init(spins):
+    return (spins.sum(2) == spins.shape[2]).type(torch.get_default_dtype())
+
 if __name__=='__main__':
     ### setting up hamiltonian
     lattice_sites = 8
@@ -32,7 +36,7 @@ if __name__=='__main__':
     corr_list = [ex_op.avg_correlation(op.Sz, d+1, lattice_sites) for d in range(int(lattice_sites/2))]
 
     ### loading ED Data for Validation
-    folder = 'ED_data/TFI8x/'
+    folder = 'ED_data/TFI8z/'
     append = '_0.2_1.3.csv'
     val_h_params = np.loadtxt(folder + 'h_params' + append, delimiter=',')
     val_t_arr = np.loadtxt(folder + 't_arr' + append, delimiter=',')
@@ -43,8 +47,8 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
-    init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
-    #init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=1000)
+    #init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
+    init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=1000)
     norm = cond.Norm(weight=25, norm_target=1)
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, val_t_arr, val_h_params)
     
@@ -58,14 +62,20 @@ if __name__=='__main__':
 
     #ckpt = 'TFI8x_DeepConv_slurm1.ckpt'
     model = models.multConvDeep(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
-
-    trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=25,
+    '''
+    trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=50,
+        auto_select_gpus=True, gradient_clip_val=.5,
+        callbacks=[lr_monitor, checkpoint_callback],
+        deterministic=False, progress_bar_refresh_rate=20,
+        accelerator='ddp' ,plugins=DDPPlugin(find_unused_parameters=False) )
+    '''
+    trainer = pl.Trainer(resume_from_checkpoint='TFI8z_DeepConv_slurm1.ckpt', gpus=1, max_epochs=50,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=20,
         accelerator='ddp' ,plugins=DDPPlugin(find_unused_parameters=False) )
     trainer.fit(model=model, datamodule=env)
-    trainer.save_checkpoint('TFI8x_DeepConv_slurm3.ckpt')
+    trainer.save_checkpoint('TFI8z_DeepConv_slurm2.ckpt')
 
     #model = models.multConvModel.load_from_checkpoint('ckpts/TFI_4-epoch=81-val_loss=0.00.ckpt')
     #utils.plot_results('TFI Model', model, obs, corr_list, val_t_arr, val_h_params, ED_magn, ED_susc, ED_corr, 'results/TFI8x/')

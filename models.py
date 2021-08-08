@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 import math
-
+"""
 @tNN.wave_function
 class simpleModel(pl.LightningModule):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
@@ -225,7 +225,7 @@ class realModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return self.opt(self.parameters(), lr=self.lr)
-
+"""
 
 
 class multConv2(tNN.Wave_Fun):
@@ -286,9 +286,7 @@ class multConv2(tNN.Wave_Fun):
         lr_scheduler = self.scheduler(optimizer, patience=1, verbose=True, factor=.5)
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
 
-
-
-class tryout(tNN.Wave_Fun):
+class multConvDeep2(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
         super().__init__(lattice_sites = lattice_sites)
         self.save_hyperparameters()
@@ -307,7 +305,7 @@ class tryout(tNN.Wave_Fun):
             nn.Linear(conv_out, mult_size),
         )
 
-        tNN_hidden = 64
+        tNN_hidden = 128
         self.tNN_first = nn.Sequential(
             nn.Linear(1 + num_h_params, tNN_hidden),
             nn.CELU(),
@@ -319,14 +317,14 @@ class tryout(tNN.Wave_Fun):
             nn.CELU(),
         )
         self.tNN_hidden2 = nn.Sequential(
-            nn.Linear( tNN_hidden, tNN_hidden),
+            nn.Linear( 2 * tNN_hidden, tNN_hidden),
             nn.CELU(),
             nn.Linear(tNN_hidden, tNN_hidden),
             nn.CELU(),
         )
 
         self.tNN_last = nn.Sequential(
-            nn.Linear( tNN_hidden, mult_size),
+            nn.Linear( 2 * tNN_hidden, mult_size),
         )
 
         after_act = int( mult_size / 2 )
@@ -343,35 +341,35 @@ class tryout(tNN.Wave_Fun):
             act.complex_celu(),
         )            
         self.psi_hidden2 = nn.Sequential(
-            act.ComplexLinear( psi_hidden, psi_hidden),
+            act.ComplexLinear( 2 * psi_hidden, psi_hidden),
             act.complex_celu(),
             act.ComplexLinear( psi_hidden, psi_hidden),
             act.complex_celu(),
         )
         self.psi_last = nn.Sequential(
-            act.ComplexLinear( psi_hidden, 1),
+            act.ComplexLinear( 2 * psi_hidden, 1),
         )
 
     def forward(self, spins, alpha):
         lat_out = self.lattice_net(spins.unsqueeze(1))
         t0 = self.tNN_first(alpha)
         t1 = self.tNN_hidden1(t0)
-        #t2 = self.tNN_hidden2(torch.cat((t0, t1), dim=1))
-        t2 = self.tNN_hidden2(t0 + t1)
-        #t_out = self.tNN_last(torch.cat((t0, t1, t2), dim=1))
-        t_out = self.tNN_last(t1 + t2)
+        t2 = self.tNN_hidden2(torch.cat((t0, t1), dim=1))
+        #t2 = self.tNN_hidden2(t0 + t1)
+        t_out = self.tNN_last(torch.cat((t0, t2), dim=1))
+        #t_out = self.tNN_last(t1 + t2)
         psi_0 = self.psi_first( t_out * lat_out )
         psi_1 = self.psi_hidden1( psi_0 )
-        #psi_2 = self.psi_hidden2( torch.cat((psi_0, psi_1), dim=1) )
-        psi_2 = self.psi_hidden2( psi_0 + psi_1 )
-        #psi_out = self.psi_last( torch.cat((psi_0, psi_1, psi_2), dim=1) )
-        psi_out = self.psi_last( psi_1 + psi_2 )
+        psi_2 = self.psi_hidden2( torch.cat((psi_0, psi_1), dim=1) )
+        #psi_2 = self.psi_hidden2( psi_0 + psi_1 )
+        psi_out = self.psi_last( torch.cat((psi_0, psi_2), dim=1) )
+        #psi_out = self.psi_last( psi_1 + psi_2 )
         return psi_out
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        lr_scheduler = self.scheduler(optimizer, patience=1, verbose=True, factor=.5)
-        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
+        lr_scheduler = self.scheduler(optimizer, patience=3, verbose=True, factor=.5)
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
 
 class multConvDeep(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate):
@@ -453,5 +451,5 @@ class multConvDeep(tNN.Wave_Fun):
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        lr_scheduler = self.scheduler(optimizer, patience=0, verbose=True, factor=.5)
-        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
+        lr_scheduler = self.scheduler(optimizer, patience=3, verbose=True, factor=.5)
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
