@@ -42,12 +42,29 @@ class complex_celu(nn.Module):
     return self.celu(torch.real(x)) + 1j * self.celu(torch.imag(x))
 
 
-class Euler_act(nn.Module):
+class rad_phase_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
     x = x.reshape(x.shape[0], int(x.shape[1] / 2), 2)
     return x[:, :, 0] * torch.exp(1j*x[:, :, 1])
+
+class rad_phase_conv_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    #assumes x of shape (N, C, L) with C%2=0
+    half = int(x.shape[1]/2)
+    ret = x[:, :half, :] * torch.exp(1j*x[:, half:, :])
+    #print('rad_phase shape', ret.shape)
+    return ret
+
+
+class Euler_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    return torch.exp(1j*x)
 
 
 
@@ -87,3 +104,26 @@ class mod_relu(nn.Module):
 
     def forward(self, z):
         return self.relu(torch.abs(z) + self.b) * torch.exp(1.j * torch.angle(z))
+
+
+def apply_complex(fr, fi, input, dtype = torch.complex64):
+    return (fr(torch.real(input))-fi(torch.imag(input))) + 1j*(fr(torch.imag(input))+fi(torch.real(input)))
+
+class ComplexConv1d(nn.Module):
+    def __init__(self,in_channels, out_channels, kernel_size=3, stride=1, padding = 0,
+                 dilation=1, groups=1, bias=True):
+        super().__init__()
+        self.conv_r = nn.Conv1d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv_i = nn.Conv1d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        
+    def forward(self,input):    
+        return apply_complex(self.conv_r, self.conv_i, input)
+
+class ComplexLinear(nn.Module):
+    def __init__(self,in_features, out_features, bias=True, device=None, dtype=None):
+        super().__init__()
+        self.lin_r = nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype)
+        self.lin_i = nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype)
+        
+    def forward(self,input):    
+        return apply_complex(self.lin_r, self.lin_i, input)

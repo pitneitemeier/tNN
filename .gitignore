@@ -3,8 +3,16 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+test.py
+
 #lightning logs
 lightning_logs/
+
+#checkpoint files
+*.ckpt
+
+#jupyter notebooks
+*.ipynb
 
 #saved imgs
 *.png

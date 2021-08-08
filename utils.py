@@ -1,23 +1,6 @@
 import torch
 import numpy as np
 
-def set_device(use_gpu, dtype):
-    # Decide which device to use.
-    if use_gpu and not torch.cuda.is_available():
-        raise RuntimeError('use_gpu is True but CUDA is not available')
-
-    if use_gpu:
-      device = torch.device('cuda')
-      if (dtype==torch.float32):
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-      elif (dtype==torch.float64):
-        torch.set_default_tensor_type('torch.cuda.DoubleTensor') 
-
-    else:
-        device = torch.device('cpu')
-        torch.set_default_dtype(dtype)
-    return device
-
 def get_map(operator, lattice_sites):
   '''
   Parameters
@@ -173,7 +156,7 @@ def calc_dt_psi(psi_s, alpha):
   return dt_psi_s.unsqueeze(2)
 
 
-def psi_norm(psi_s):
+def psi_norm_sq(psi_s):
   '''
   Returns the Norm of a Wave function batch wise
   Parameters
@@ -186,52 +169,127 @@ def psi_norm(psi_s):
   norm : tensor
     shape = (num_alpha, 1)  
   '''
-  return (torch.abs(psi_s)**2).sum(1)
+  return (abs_sq(psi_s)).sum(1)
 
-
-
-def train_loss2(dt_psi_s, h_loc, psi_s, psi_s_0, o_loc, alpha, loss_weight):
-  #part to satisfy initial condition
-  psi_s_0_sq_sum = (torch.abs(psi_s_0)**2).sum(1)
-  psi_0_o_loc_sum = (torch.conj(psi_s_0) * o_loc).sum(1)
-  init_cond = torch.mean( (torch.abs( (psi_0_o_loc_sum / psi_s_0_sq_sum) - 1)) ** 2 )
-  #print(torch.mean(psi_0_o_loc_sum / psi_s_0_sq_sum))
-
-  #part to satisfy schrödinger equation
-  h_loc_sq_sum = (torch.abs(h_loc)**2).sum(1)
-  dt_psi_sq_sum = (torch.abs(dt_psi_s)**2).sum(1)
-  dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-  #print("abs val diff: ", torch.abs(h_loc_sq_sum - dt_psi_h_loc_sum))
-  schroedinger = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-  #schroedinger = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) ** 2)
-
-  #part to encourage a normed wave fun
-  psi_norm_target = 1
-  batched_norm = psi_norm(psi_s)
-  norm = torch.mean( (batched_norm - psi_norm_target) ** 2 )
-
-  return schroedinger + 50 * init_cond + 2 * norm , schroedinger, 50 * init_cond, 2* norm
-  #return init_cond
-  
 def val_loss(psi_s, o_loc, o_target):
-  psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
+  psi_sq_sum = (abs_sq(psi_s)).sum(1)
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-  observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze(1)
-  loss = (torch.abs((observable - o_target)) ** 2).sum(0)
+  observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze()
+  loss = (abs_sq((observable - o_target))).sum(0)
   return loss, torch.real(observable)
 
-def measure_observable(psi_s, psi_sp, o_mat, spin_config, ext_param_scale = None):
-  o_loc = calc_Oloc(psi_sp, o_mat, spin_config, ext_param_scale)
-  psi_s_sq_sum = (torch.abs(psi_s)**2).sum(1)
-  psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-  return psi_s_o_loc_sum / psi_s_sq_sum
- 
 
-def get_t_end(current_epoch, num_epochs, t_min, t_max, step_after = 5):
+def get_t_end(current_epoch, num_epochs, t_range, step_after = 1):
   #calculate dynamic end time and decay rate for loss
   n = int(current_epoch / step_after) + 1
   N = int (num_epochs / step_after)
-  t_end = t_min + (t_max - t_min) * np.log(10 * n / N + 1) / np.log( 11 )
+  #t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
+  t_end = t_range[0] + (t_range[1] - t_range[0]) * n / N 
   #t_max = self.t_max
-  loss_weight = 1e-2 / (t_end/t_max + 1e-2)
+  loss_weight = 1e-2 / (t_end/t_range[1] + 1e-2)
   return t_end, loss_weight
+
+def tensor_to_string(alist):
+    format_list = ['{:.1f}' for item in alist] 
+    s = ', '.join(format_list)
+    return s.format(*alist)
+
+def get_susceptibility(magnetization, alpha):
+  return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, :, 1].sum(1)
+
+import matplotlib.pyplot as plt
+def plot_results(name, model, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr, plot_folder):
+  device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
+  model = model.to(device)
+  assert(h_param_arr.shape[0] == ED_magn_arr.shape[0] == ED_susc_arr.shape[0] == ED_corr_arr.shape[0])
+  t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
+  tot_fig, tot_ax = plt.subplots(figsize=(10,6))
+  tot_ax.set_xlabel('ht')
+  magn_name = magn_op[0][0].name
+  corr_name = corr_op_list[0][0][0].name
+  tot_ax.set_ylabel(r'$ \langle '+ magn_name +r' \rangle$', fontsize=13)
+  tot_title = f'{name}, {model.lattice_sites} Spins'
+  tot_ax.set_title(tot_title)
+  dummy_lines = [tot_ax.plot([], [], c='black', ls='--', label='ED'), tot_ax.plot([], [], c='black', label='tNN')]
+  i=0
+  for h_param, ED_magn, ED_susc, ED_corr in zip(h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr):
+      from collections import Sequence
+      if isinstance(h_param, Sequence):
+          h_param_tens = torch.tensor(h_param).reshape(1,1,-1).repeat(t_arr.shape[0])
+      else:
+          h_param_tens = torch.full((t_arr.shape[0], 1, 1), h_param)
+      h_param_tens = h_param_tens.type(torch.get_default_dtype())
+      alpha = torch.cat((t_arr.reshape(-1,1,1), h_param_tens), dim=2)
+      alpha = alpha.repeat(1, model.spins.shape[1], 1)
+      alpha.requires_grad = True
+      
+      magn = model.measure_observable(alpha, magn_op, model.lattice_sites)
+      susc = get_susceptibility(magn, alpha)
+      corr = [model.measure_observable(alpha, corr, model.lattice_sites).detach() for corr in corr_op_list]
+      corr = torch.stack(corr)
+      fig, ax = plt.subplots(4, 2, figsize=(10,6), sharex='col', gridspec_kw={'width_ratios': [20, 1], 'height_ratios': [2,2,1,1]})
+      ax[0,1].axis('off')
+      ax[1,1].axis('off')
+      if isinstance(h_param, Sequence):
+          label = f'$h={tensor_to_string(h_param)} h_c$'
+      else:
+          label = f'$h={h_param} h_c$'
+      title = tot_title + ', ' + label
+      ax[0,0].set_title(title)
+      tot_ax.plot(t_arr, magn.detach().cpu(), label=label, c=f'C{i}')
+      tot_ax.plot(t_arr, ED_magn, ls='--', c=f'C{i}')
+
+      ax[0, 0].plot(t_arr, magn.detach().cpu(), label='tNN', c='C0')
+      ax[0, 0].plot(t_arr, ED_magn, label = 'ED', ls='--', c='C1')
+      ax2_1 = ax[0,0].twinx()
+      ax[0, 0].set_zorder(ax2_1.get_zorder() + 1)
+      ax[0, 0].patch.set_visible(False)
+      ax2_1.tick_params(axis='y', labelcolor='grey')
+      ax2_1.set_ylabel('Residuals', c='grey')
+      ax2_1.plot(t_arr, ED_magn - magn.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
+      ax[0,0].legend()
+      ax[1, 0].plot(t_arr, susc.detach().cpu(), label='tNN', c='C0')
+      ax[1, 0].plot(t_arr, ED_susc, label = 'ED', ls='--', c='C1')
+      ax2_1 = ax[1,0].twinx()
+      ax[1, 0].set_zorder(ax2_1.get_zorder() + 1)
+      ax[1, 0].patch.set_visible(False)
+      ax2_1.tick_params(axis='y', labelcolor='grey')
+      ax2_1.set_ylabel('Residuals', c='grey')
+      ax2_1.plot(t_arr, ED_susc - susc.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
+      ax[1,0].legend()
+      
+      y = np.arange(0,model.lattice_sites/2 + 1) + 0.5
+      X, Y = np.meshgrid(t_arr, y)
+      c1 = ax[2,0].pcolor(X, Y, corr[:, :-1].cpu(), label='tNN')
+      plt.colorbar(c1, cax=ax[2,1])
+      X, Y = np.meshgrid(t_arr, y)
+      c2 = ax[3,0].pcolor(X, Y, ED_corr[:, :-1], label='ED')
+      plt.colorbar(c2, cax=ax[3,1])
+      
+      ax[2,0].set_yticks(y[:-1] + 0.5)
+      ax[2,0].legend()
+      ax[3,0].set_yticks(y[:-1] + 0.5)
+      ax[3,0].legend()
+      ax[3,0].set_xlabel('ht')
+      ax[0,0].set_ylabel(r'$ \langle ' + magn_name + r' \rangle$', fontsize=13)
+      ax[1,0].set_ylabel(r'$ \frac{\partial \langle ' + magn_name + r' \rangle}{\partial h}$', fontsize=17)
+      ax[2,0].set_ylabel(r'd')
+      ax[3,0].set_ylabel(r'd')
+      
+      comm_ax = fig.add_subplot(313, frame_on=False)
+      comm_ax.tick_params(left=False,
+          bottom=False,
+          labelleft=False,
+          labelbottom=False)
+      comm_ax.set_ylabel(r'$\langle ' + corr_name + '_i \cdot ' + corr_name + r'_{i+d} \rangle $'+ '\n\n', fontsize=13)
+      
+      #fig.tight_layout()
+      fig.savefig(plot_folder + title + '.png')
+      plt.close(fig)
+      i+=1
+  tot_ax.legend()
+  tot_fig.savefig(plot_folder + tot_title + '.png')
+  model.to('cpu')
+
+def abs_sq(x):
+  return x.real**2 + x.imag**2
