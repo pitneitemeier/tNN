@@ -174,7 +174,7 @@ def psi_norm_sq(psi_s):
 def val_loss(psi_s, o_loc, o_target):
   psi_sq_sum = (abs_sq(psi_s)).sum(1)
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-  observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze()
+  observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze()
   loss = (abs_sq((observable - o_target))).sum(0)
   return loss, torch.real(observable)
 

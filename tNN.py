@@ -7,16 +7,16 @@ import utils
 import Datasets
 import matplotlib.pyplot as plt
 from collections import Sequence
-#TODO 
-#documentation
+import sampler
 
 
 class Environment(LightningDataModule):
-    def __init__(self, condition_list, h_param_range, val_condition, val_t_arr, val_h_params, batch_size, t_range = (0,1), num_workers=0, epoch_len=100000):
+    def __init__(self, condition_list, h_param_range, val_condition, val_t_arr, val_h_params, batch_size, train_sampler, val_sampler, t_range = (0,1), num_workers=0, epoch_len=100000):
         super().__init__()
         self.condition_list = condition_list
         self.val_condition = val_condition
-        
+        self.train_sampler = train_sampler
+        self.val_sampler = val_sampler
         self.h_param_range = h_param_range
         self.t_range = t_range
         self.batch_size = batch_size
@@ -26,7 +26,7 @@ class Environment(LightningDataModule):
         self.epoch_len = epoch_len
 
     def setup(self, stage: Optional[str] = None):
-        self.train_data = Datasets.Train_Data(self.h_param_range, self.epoch_len)
+        self.train_data = Datasets.Train_Data(self.t_range, self.h_param_range, self.epoch_len)
         self.val_data = Datasets.Val_Data(self.val_h_params)
 
     def train_dataloader(self):
@@ -171,7 +171,7 @@ class Wave_Fun(LightningModule):
     def __init__(self, lattice_sites):
         super().__init__()
         self.lattice_sites = lattice_sites
-        self.register_buffer('spins', utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype()))
+        #self.register_buffer('spins', utils.get_all_spin_configs(self.lattice_sites).unsqueeze(0).type(torch.get_default_dtype()))
 
     def call_forward(self, spins, alpha):
         '''
@@ -232,21 +232,19 @@ class Wave_Fun(LightningModule):
         return psi.reshape( alpha_shape[0], sprimes_shape[1], sprimes_shape[2], 1)
 
     def training_step(self, alpha, batch_idx):
-        t_range = self.trainer.datamodule.t_range
-        loss_weight = 0
-        alpha[:, :, 0] = (t_range[1] - t_range[0]) * alpha[:, :, 0] + t_range[0]
+        spins = self.trainer.datamodule.train_sampler(self, alpha)
         #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
         if (alpha.shape[1] == 1):
-            alpha = alpha.repeat(1, self.spins.shape[1], 1)
+            alpha = alpha.repeat(1, spins.shape[1], 1)
         #gradient needed for dt_psi
         alpha.requires_grad = True
 
         #calculate psi_s only once since it is needed for many conditions
-        psi_s = self.call_forward(self.spins, alpha)
+        psi_s = self.call_forward(spins, alpha)
         
         loss = torch.zeros(1, device=self.device, requires_grad=True)
         for condition in self.trainer.datamodule.condition_list:
-            cond_loss = condition(self, psi_s, self.spins, alpha, loss_weight)
+            cond_loss = condition(self, psi_s, spins, alpha)
             self.log(condition.name, cond_loss, logger=True, prog_bar=True)
             loss = loss + cond_loss
         
@@ -255,7 +253,11 @@ class Wave_Fun(LightningModule):
 
     def validation_step(self, val_set_idx, _):
         val_set_idx = int(val_set_idx.item())
-        val_dict = self.trainer.datamodule.val_condition(self, self.spins, val_set_idx)
+        print(val_set_idx, _)
+        alpha = self.trainer.datamodule.val_condition.get_alpha(self, val_set_idx)
+        spins = self.trainer.datamodule.val_sampler(self, alpha)
+
+        val_dict = self.trainer.datamodule.val_condition(self, spins, val_set_idx)
         self.log('val_loss', val_dict['val_loss'], prog_bar=True)
         return val_dict
     
@@ -268,18 +270,6 @@ class Wave_Fun(LightningModule):
         ax.set_title(tot_title)
         dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
         i = 0
-        '''
-        for out in outs:
-            for h_param, t_arr, observable, ED_observable in \
-            zip(out['val_h_param'], out['t_arr'], out['observable'], out['ED_observable']):
-                if isinstance(h_param, Sequence):
-                    label = f'$h={utils.tensor_to_string(h_param)} h_c$'
-                else:
-                    label = f'$h={h_param:.1f} h_c$'
-                ax.plot(t_arr.cpu(), observable.cpu(), label=label, c=f'C{i}')
-                ax.plot(t_arr.cpu(), ED_observable.cpu(), c=f'C{i}', ls='--')
-                i+=1
-        '''
         for out in outs:
             h_param, t_arr, observable, ED_observable = out['val_h_param'], out['t_arr'], out['observable'], out['ED_observable']
             if isinstance(h_param, Sequence):
@@ -293,17 +283,28 @@ class Wave_Fun(LightningModule):
         ax.legend()
         fig.savefig(tot_title + f'_{self.local_rank}.png')
         plt.close(fig)
+
+        fig, ax = plt.subplots()
+        alpha = self.trainer.datamodule.val_condition.get_alpha(self, 0)
+        spins = torch.ones((1,1, self.lattice_sites), device=self.device)
+        prob = utils.abs_sq( self.call_forward(spins, alpha))
+        print(alpha.shape, prob.shape)
+        ax.plot(alpha[:, 0].cpu(), prob[:,0].cpu())
+        fig.savefig('prob.png')
         
-    def measure_observable(self, alpha, obs, lattice_sites):
+        plt.close(fig)
+        
+    def measure_observable(self, alpha, spins, obs, lattice_sites):
         alpha = alpha.to(self.device)
+        spins = spins.to(self.device)
         obs_map = utils.get_map(obs, lattice_sites)
         obs_mat = utils.get_total_mat_els(obs, lattice_sites)
         obs_map = obs_map.to(self.device)
         obs_mat = obs_mat.to(self.device)
-        sp_o = utils.get_sp(self.spins, obs_map)
-        psi_s = self.call_forward(self.spins, alpha)
+        sp_o = utils.get_sp(spins, obs_map)
+        psi_s = self.call_forward(spins, alpha)
         psi_sp_o = self.call_forward_sp(sp_o, alpha)
-        o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, self.spins)
+        o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins)
         psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
         psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
         observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)

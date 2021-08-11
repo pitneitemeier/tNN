@@ -112,16 +112,16 @@ def plot_res(t_arr, magn, susc):
   #ax.plot(data[:, 0], data[:, 1], c="red", label=r"Transverse magnetization $\langle X\rangle$", ls='--')
   fig.savefig('ED_res.png')
 
-lattice_sites = 8
-res_folder = f'ED_data/TFI{lattice_sites}z/'
-#psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
-psi_init = e_i(0,2)
+lattice_sites = 4
+res_folder = f'ED_data/TFI{lattice_sites}x/'
+psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
+#psi_init = e_i(0,2)
 psi_init = get_init_state_kron(psi_init, lattice_sites)
 magn_op = get_mean_magn_op(lattice_sites, sig_x)
 corr_op_list = [get_mean_corr_op(lattice_sites, sig_z, d + 1) for d in range(int(lattice_sites/2))]
-h_param_list = [0.2, 0.5, 0.7, 0.8, 1., 1.3]
+#h_param_list = [0.2, 0.5, 0.7, 0.8, 1., 1.3]
 #h_param_list = [0.9, 1., 1.1]
-#h_param_list = [1.]
+h_param_list = [1.]
 magn_list = []
 susc_list = []
 corr_list = []

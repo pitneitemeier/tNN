@@ -127,3 +127,53 @@ class ComplexLinear(nn.Module):
         
     def forward(self,input):    
         return apply_complex(self.lin_r, self.lin_i, input)
+
+
+class Attention_Block(nn.Module):
+  def __init__(self, embed_dim, num_heads):
+    super().__init__()
+    self.att_layer = nn.MultiheadAttention( embed_dim, num_heads, batch_first=True)
+    self.key_conv = nn.Conv1d(32, 32, 1)
+    self.query_conv = nn.Conv1d(32, 32, 1)
+    self.value_conv = nn.Conv1d(32, 32, 1)
+    self.linear_conv1 = nn.Conv1d(32, 32, 1)
+    self.linear_conv2 = nn.Conv1d(32, 32, 1)
+    self.relu = nn.ReLU()
+  def forward(self, input):
+    att_out, _ = self.att_layer(self.query_conv(input), self.key_conv(input), self.value_conv(input))
+    out = self.linear_conv2( self.relu( self.linear_conv1(att_out + input) ) )
+    return out + att_out + input
+
+import copy
+def clones(module, N):
+    "Produce N identical layers."
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+
+class parallel_Linear(nn.Module):
+  def __init__(self, in_features, out_features, num_heads, bias=True, device=None, dtype=None):
+      super().__init__()
+      self.layers = nn.ModuleList([nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype) for _ in range(num_heads)])
+  def forward(self, input):
+    return torch.stack([layer(input) for layer in self.layers], dim=2)
+
+import torch.nn.functional as F
+class time_attention(nn.Module):
+  def __init__(self, mult_size, num_heads):
+    super().__init__()
+    self.t_embed = parallel_Linear(in_features=mult_size, out_features=int(mult_size/num_heads), num_heads=num_heads)
+    self.lat_embed = parallel_Linear(mult_size, int(mult_size/num_heads), num_heads)
+    self.value_embed = parallel_Linear(mult_size * 2, int(mult_size/num_heads), num_heads)
+    self.linear_out = nn.Linear(mult_size, mult_size)
+    
+  def forward(self, t_inp, lat_inp):
+    t_embed = self.t_embed(t_inp)
+    lat_emb = self.lat_embed(lat_inp)
+    value_emb = self.value_embed( torch.cat((t_inp, lat_inp), dim=1))
+    att_weights = F.softmax( t_embed * lat_emb, dim=1)
+    out = self.linear_out( (att_weights * value_emb).reshape(t_inp.shape) )
+    return out
+
+    out = self.linear_out( att_weights)
+
+
+    

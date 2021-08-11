@@ -6,8 +6,9 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, h_param_range=None, epoch_len=100000):
+    def __init__(self, t_range, h_param_range=None, epoch_len=100000):
         self.h_param_range = h_param_range
+        self.t_range = t_range
         #just setting fixed epoch len to define the interval for validation and lr scheduling
         self.epoch_len = int(epoch_len)
     def __len__(self):
@@ -38,7 +39,7 @@ class Train_Data(Dataset):
                 alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
         else:
             alpha_arr = torch.zeros((1,1)) 
-        alpha_arr[:, 0] = torch.rand(1,1)
+        alpha_arr[:, 0] = (self.t_range[1] - self.t_range[0]) * torch.rand(1,1) + self.t_range[0]
         return alpha_arr
 
 

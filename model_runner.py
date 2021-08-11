@@ -14,6 +14,9 @@ import utils
 import example_operators as ex_op
 import models
 
+def psi_init_x_forward(spins, lattice_sites):
+    return torch.full_like(spins[:, :1], 2**(- lattice_sites / 2))
+
 if __name__=='__main__':
     ### setting up hamiltonian
     lattice_sites = 8
@@ -42,10 +45,10 @@ if __name__=='__main__':
     h_param_range = [(0.15, 1.35)]
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
-    init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
+    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
+    #init_cond = cond.init_observable(obs, lattice_sites=lattice_sites, name='sx init', weight=75)
     #init_cond = cond.init_scalar_prod(psi_init, lattice_sites, 'z up', weight=1000)
-    norm = cond.Norm(weight=25, norm_target=1)
+    #norm = cond.Norm(weight=25, norm_target=1)
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, val_t_arr, val_h_params)
     
     from pytorch_lightning.callbacks import LearningRateMonitor
@@ -53,19 +56,28 @@ if __name__=='__main__':
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_8-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
-    env = tNN.Environment(condition_list=[schrodinger, norm, init_cond], h_param_range=h_param_range, batch_size=50, epoch_len=2e5, 
-        val_condition=val_cond, val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=0)
+    env = tNN.Environment(condition_list=[schrodinger], h_param_range=h_param_range, batch_size=50, epoch_len=2e5, 
+        val_condition=val_cond, val_h_params=val_h_params, val_t_arr=val_t_arr, t_range=(0,3), num_workers=48)
 
     #ckpt = 'TFI8x_DeepConv_slurm1.ckpt'
-    model = models.multConvDeep(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    #model = models.multConvDeep(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3)
+    model = models.init_fixed(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward, patience=1)
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=25,
+    '''
+    trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=50,
+        auto_select_gpus=True, gradient_clip_val=.5,
+        callbacks=[lr_monitor, checkpoint_callback],
+        deterministic=False, progress_bar_refresh_rate=20,
+        accelerator='ddp' ,plugins=DDPPlugin(find_unused_parameters=False) )
+    '''
+    trainer = pl.Trainer(resume_from_checkpoint='TFI8x_init_fixed_slurm1.ckpt', gpus=-1, max_epochs=50,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=20,
         accelerator='ddp' ,plugins=DDPPlugin(find_unused_parameters=False) )
     trainer.fit(model=model, datamodule=env)
-    trainer.save_checkpoint('TFI8x_DeepConv_slurm3.ckpt')
+    trainer.save_checkpoint('TFI8x_init_fixed_slurm2.ckpt')
+    
 
     #model = models.multConvModel.load_from_checkpoint('ckpts/TFI_4-epoch=81-val_loss=0.00.ckpt')
     #utils.plot_results('TFI Model', model, obs, corr_list, val_t_arr, val_h_params, ED_magn, ED_susc, ED_corr, 'results/TFI8x/')
