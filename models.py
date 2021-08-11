@@ -465,8 +465,8 @@ class init_fixed(tNN.Wave_Fun):
         self.lr = learning_rate
         self.patience = patience
         self.opt = torch.optim.Adam
-        self.scheduler = torch.optim.lr_scheduler.StepLR
-        #self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
+        #self.scheduler = torch.optim.lr_scheduler.StepLR
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
         conv_out = 32 * ((self.lattice_sites - 2 + 2) + 2 * 1)
         mult_size = 512
         self.lattice_net = nn.Sequential(
@@ -539,8 +539,8 @@ class init_fixed(tNN.Wave_Fun):
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
-        #lr_scheduler = self.scheduler(optimizer, patience=self.patience, verbose=True, factor=.5)
-        lr_scheduler = self.scheduler(optimizer, step_size=1, verbose=True, gamma=0.5)
+        lr_scheduler = self.scheduler(optimizer, patience=self.patience, verbose=True, factor=.5)
+        #lr_scheduler = self.scheduler(optimizer, step_size=1, verbose=True, gamma=0.5)
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
 
 
