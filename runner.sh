@@ -2,11 +2,11 @@
 #SBATCH --nodes=1
 #SBATCH --account=thes1051
 #SBATCH --cpus-per-task=48
-#SBATCH --job-name=TFI8x
+#SBATCH --job-name=TFI10x
 #SBATCH --partition=c18g
 #SBATCH --gres=gpu:volta:2
-#SBATCH --time=0-15:00:00
-#SBATCH --output=out/slurmTFI8x_6.out
+#SBATCH --time=0-17:00:00
+#SBATCH --output=out/slurmTFI10x_1.out
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
 
 module load python/3.9.1

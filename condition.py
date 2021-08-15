@@ -248,9 +248,7 @@ class ED_Validation(Val_Condition):
     def __call__(self, model, spins, val_set_index):
         if not (model.device == self.device):
             self.to(model.device)
-        h_params = self.h_param[val_set_index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
-        t_arr = self.t_arr.reshape(-1,1,1)
-        alpha = torch.cat((t_arr, h_params), dim=2)
+        alpha = self.get_alpha(model, val_set_index)
         psi_s = model.call_forward(spins, alpha)
         sp_o = utils.get_sp(spins, self.obs_map)
         psi_sp_o = model.call_forward_sp(sp_o, alpha)

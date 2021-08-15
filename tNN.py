@@ -232,7 +232,7 @@ class Wave_Fun(LightningModule):
         return psi.reshape( alpha_shape[0], sprimes_shape[1], sprimes_shape[2], 1)
 
     def training_step(self, alpha, batch_idx):
-        spins = self.trainer.datamodule.train_sampler(self, alpha)
+        spins = self.trainer.datamodule.train_sampler(self, alpha, batch_idx)
         #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
         if (alpha.shape[1] == 1):
             alpha = alpha.repeat(1, spins.shape[1], 1)
@@ -251,11 +251,9 @@ class Wave_Fun(LightningModule):
         self.log('train_loss', loss, logger=True)
         return {'loss' :loss}
 
-    def validation_step(self, val_set_idx, _):
-        val_set_idx = int(val_set_idx.item())
-        print(val_set_idx, _)
+    def validation_step(self, _, val_set_idx):
         alpha = self.trainer.datamodule.val_condition.get_alpha(self, val_set_idx)
-        spins = self.trainer.datamodule.val_sampler(self, alpha)
+        spins = self.trainer.datamodule.val_sampler(self, alpha, val_set_idx)
 
         val_dict = self.trainer.datamodule.val_condition(self, spins, val_set_idx)
         self.log('val_loss', val_dict['val_loss'], prog_bar=True)
@@ -283,7 +281,7 @@ class Wave_Fun(LightningModule):
         ax.legend()
         fig.savefig(tot_title + f'_{self.local_rank}.png')
         plt.close(fig)
-
+        '''
         fig, ax = plt.subplots()
         alpha = self.trainer.datamodule.val_condition.get_alpha(self, 0)
         spins = torch.ones((1,1, self.lattice_sites), device=self.device)
@@ -293,6 +291,7 @@ class Wave_Fun(LightningModule):
         fig.savefig('prob.png')
         
         plt.close(fig)
+        '''
         
     def measure_observable(self, alpha, spins, obs, lattice_sites):
         alpha = alpha.to(self.device)

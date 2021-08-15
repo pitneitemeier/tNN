@@ -465,6 +465,7 @@ class init_fixed(tNN.Wave_Fun):
         self.lr = learning_rate
         self.patience = patience
         self.opt = torch.optim.Adam
+        #self.opt = torch.optim.LBFGS
         #self.scheduler = torch.optim.lr_scheduler.StepLR
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
         conv_out = 32 * ((self.lattice_sites - 2 + 2) + 2 * 1)
@@ -554,8 +555,8 @@ class time_transformer(tNN.Wave_Fun):
         self.patience = patience
         self.opt = torch.optim.Adam
         self.scheduler = torch.optim.lr_scheduler.StepLR
-        conv_out = 32 * 6
-        mult_size = 128
+        conv_out = 32 * (lattice_sites + 2)
+        mult_size = 256
         self.lattice_net = nn.Sequential(
             nn.Conv1d(1, 16, kernel_size=2, padding=1, padding_mode='circular'),
             nn.CELU(),
@@ -587,10 +588,11 @@ class time_transformer(tNN.Wave_Fun):
             nn.Linear(3 * tNN_hidden, mult_size),
         )
 
-        self.attention = act.time_attention(mult_size, 8)
+        self.attention = act.time_attention(mult_size, 4)
         self.flatten_conv = nn.Flatten(start_dim=1, end_dim=-1)
 
         after_act = int( mult_size / 2 )
+        #after_act = mult_size
         psi_hidden = 64
         self.psi_first = nn.Sequential(
             act.rad_phase_act(),
@@ -630,5 +632,37 @@ class time_transformer(tNN.Wave_Fun):
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)
+        lr_scheduler = self.scheduler(optimizer, step_size=1, verbose=True, gamma=0.5)
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
+
+
+class parametrized(tNN.Wave_Fun):
+    def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, init_decay=1, patience=0, optimizer=torch.optim.Adam):
+        super().__init__(lattice_sites = lattice_sites)
+        self.save_hyperparameters()
+        self.lattice_sites = lattice_sites
+        self.psi_init = psi_init
+        self.init_decay = init_decay
+        self.lr = learning_rate
+        self.patience = patience
+        self.opt = optimizer
+        self.scheduler = torch.optim.lr_scheduler.StepLR
+        #self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
+
+        self.lattice_net = act.lattice_block(kernel_size, mult_size, num_conv_features, num_conv_layers, act_fun, self.lattice_sites)
+        self.tNN = act.selfAttention(input_size=1+num_h_params, output_size=mult_size, hidden_size=tNN_hidden, num_hidden_layers=tNN_num_hidden, act_fun=act_fun)
+        self.combination_block = act.combination_block(mult_size, psi_hidden, act.complex_celu)
+        self.psi = act.ComplexSelfAttention(psi_hidden, 1, psi_hidden, psi_num_hidden, act.complex_celu)
+
+    def forward(self, spins, alpha):
+        lat_out = self.lattice_net(spins.unsqueeze(1))
+        t_out = self.tNN(alpha)
+        comb = self.combination_block(lat_out, t_out)
+        psi_out = self.psi(comb)
+        return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + self.psi_init(spins, self.lattice_sites)
+
+    def configure_optimizers(self):
+        optimizer = self.opt(self.parameters(), lr=self.lr)
+        #lr_scheduler = self.scheduler(optimizer, patience=self.patience, verbose=True, factor=.5)
         lr_scheduler = self.scheduler(optimizer, step_size=1, verbose=True, gamma=0.5)
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}

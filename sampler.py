@@ -11,7 +11,7 @@ class BaseSampler(ABC):
         self.device = 'cpu'
 
     @abstractclassmethod
-    def __call__(self, model, alpha):
+    def __call__(self, model, alpha, val_set_index):
         pass
 
 
@@ -23,7 +23,7 @@ class ExactSampler(BaseSampler):
     def to(self, device):
         self.spins = self.spins.to(device)
 
-    def __call__(self, model, alpha):
+    def __call__(self, model, alpha, val_set_index):
         if self.spins is None:
            self.spins = utils.get_all_spin_configs(self.lattice_sites).type(torch.get_default_dtype())
         if not (model.device == self.device):
@@ -35,7 +35,7 @@ class RandomSampler(BaseSampler):
         super().__init__(lattice_sites)
         self.num_samples = num_samples
     
-    def __call__(self, model, alpha):
+    def __call__(self, model, alpha, val_set_index):
         return (torch.randint(0, 2, (alpha.shape[0], self.num_samples, self.lattice_sites), 
             device=model.device, dtype=torch.get_default_dtype()) * 2 - 1)
 
@@ -58,30 +58,34 @@ class MCMCSampler(BaseSampler):
         print_until = 45
         print_from = 40
         #print(alpha.shape)
-        #print('current sample: ', current_sample[print_from:print_until,0,:], current_sample.shape)
+        #print('current sample: ', current_sample[print_from:print_until,:,:], current_sample.shape)
+        #current_prob = utils.abs_sq(model.call_forward(current_sample, alpha))
         proposed_sample = single_flip(current_sample)
         #proposed_sample = (torch.randint(0, 2, (alpha.shape[0], self.num_samples, self.lattice_sites), 
         #    device=model.device, dtype=torch.get_default_dtype()) * 2 - 1)
-        #print('proposed sample: ', proposed_sample[print_from:print_until,0,:])
+        #print('proposed sample: ', proposed_sample[print_from:print_until,:,:])
         update_prob = utils.abs_sq(model.call_forward(proposed_sample, alpha))
-        #print('current_prob', current_prob[print_from:print_until,0,:])
-        #print('update_prob', update_prob[print_from:print_until,0,:])
+        #print('current_prob', current_prob[print_from:print_until,:,:])
+        #print('update_prob', update_prob[print_from:print_until,:,:])
         transition_prob = torch.clamp(update_prob / current_prob, 0, 1)
         accept = torch.bernoulli(transition_prob)
         #rand_val = torch.rand_like(update_prob)
-        #print('randval: ', rand_val[print_from:print_until,0,:])
+        ##print('randval: ', rand_val[print_from:print_until,0,:])
         #accept = (update_prob / current_prob > rand_val).type(torch.get_default_dtype())
-        #print('accept: ', accept[print_from:print_until,0,:], accept.shape)
+        #print('accept: ', accept[print_from:print_until,:,:], accept.shape)
         new_sample = accept * proposed_sample + (1 - accept) * current_sample
-        #print('new sample', new_sample[print_from:print_until,0,:], new_sample.shape)
+        #print('new sample', new_sample[print_from:print_until,:,:], new_sample.shape)
         #print('accept*proposed', (accept * proposed_sample)[print_from:print_until,0,:])
         new_prob = accept * update_prob + (1 - accept) * current_prob
-        #print('new_prob', new_prob[print_from:print_until,0,:])
+        print('new_prob', new_prob[print_from:print_until,:,:])
         return new_sample, new_prob
         
-    def __call__(self, model, alpha):
-        #print(alpha)
-        #print(alpha.shape)
+    def __call__(self, model, alpha, val_set_idx):
+        print('sampling for val set: ',val_set_idx)
+        print(alpha[0,:,:])
+        #if (alpha.shape[1] == 1):
+        #    alpha = alpha.repeat(1, self.num_samples, 1)
+        #print('alpha sahpe', alpha.shape)
         sample = (torch.randint(0, 2, (alpha.shape[0], self.num_samples, self.lattice_sites), 
             device=model.device, dtype=torch.get_default_dtype()) * 2 - 1)
         update_prob = utils.abs_sq(model.call_forward(sample, alpha))
@@ -101,6 +105,7 @@ class MCMCSamplerChains(BaseSampler):
         print_until = 45
         print_from = 40
         #print(alpha.shape)
+        current_prob = utils.abs_sq(model.call_forward(current_sample, alpha))
         #print('current sample: ', current_sample[print_from:print_until,0,:], current_sample.shape)
         proposed_sample = single_flip(current_sample)
         #proposed_sample = (torch.randint(0, 2, (alpha.shape[0], self.num_samples, self.lattice_sites), 
@@ -122,7 +127,7 @@ class MCMCSamplerChains(BaseSampler):
         #print('new_prob', new_prob[print_from:print_until,0,:])
         return new_sample, new_prob
         
-    def __call__(self, model, alpha):
+    def __call__(self, model, alpha, val_set_index):
         #print(alpha.shape)
         sample = torch.zeros((alpha.shape[0], self.num_samples, self.lattice_sites), 
             device=model.device, dtype=torch.get_default_dtype())
