@@ -251,7 +251,8 @@ class Wave_Fun(LightningModule):
         self.log('train_loss', loss, logger=True)
         return {'loss' :loss}
 
-    def validation_step(self, _, val_set_idx):
+    def validation_step(self, val_set_idx, _):
+        val_set_idx = int(val_set_idx.item())
         alpha = self.trainer.datamodule.val_condition.get_alpha(self, val_set_idx)
         spins = self.trainer.datamodule.val_sampler(self, alpha, val_set_idx)
 

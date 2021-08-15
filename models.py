@@ -639,6 +639,8 @@ class time_transformer(tNN.Wave_Fun):
 class parametrized(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, init_decay=1, patience=0, optimizer=torch.optim.Adam):
         super().__init__(lattice_sites = lattice_sites)
+        if mult_size % 2 != 0:
+            mult_size+=1
         self.save_hyperparameters()
         self.lattice_sites = lattice_sites
         self.psi_init = psi_init
