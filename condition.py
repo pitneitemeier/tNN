@@ -226,8 +226,9 @@ class Norm(Condition):
         return self.weight * norm_loss
 
 class ED_Validation(Val_Condition):
-    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params):
+    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params, MC_sampling=False):
         super().__init__()
+        self.MC_sampling = MC_sampling
         self.ED_data = torch.from_numpy(ED_data).type(torch.get_default_dtype())
         self.h_param = torch.from_numpy(val_h_params).type(torch.get_default_dtype())
         self.t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
@@ -252,9 +253,13 @@ class ED_Validation(Val_Condition):
         psi_s = model.call_forward(spins, alpha)
         sp_o = utils.get_sp(spins, self.obs_map)
         psi_sp_o = model.call_forward_sp(sp_o, alpha)
-        o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
+        if not self.MC_sampling:
+            o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
+            val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
+        else:
+            o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, self.obs_mat, spins)
+            val_loss, observable = utils.mc_val_loss(o_loc, self.ED_data[val_set_index, :])
         
-        val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
         return {'val_loss': val_loss, 'observable': observable, 
             'ED_observable': self.ED_data[val_set_index, :], 
             'val_h_param': self.h_param[val_set_index], 't_arr': self.t_arr}

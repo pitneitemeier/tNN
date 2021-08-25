@@ -197,6 +197,25 @@ class selfAttentionBlock(nn.Module):
     out = self.ff_Norm( self.ff_linear2( self.act_fun( self.ff_linear1(attended) ) ) ) + input
     return out
 
+class selfAttentionBlock1(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.value_linear = nn.Linear(hidden_size, hidden_size)
+      self.weight_linear = nn.Linear(hidden_size, hidden_size)
+      self.ff_linear1 = nn.Linear(hidden_size, hidden_size)
+      self.ff_linear2 = nn.Linear(hidden_size, hidden_size)
+      self.inp_Norm = nn.LayerNorm(hidden_size)
+      self.att_Norm = nn.LayerNorm(hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.act_fun( self.inp_Norm(input) )
+    out = self.att_Norm( self.value_linear(out) * self.weight_linear(out) + out )
+    out = self.ff_linear2( self.act_fun( self.ff_linear1(out) ) ) + out
+    return out
+
 class selfAttention(nn.Module):
   def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
     super().__init__()
@@ -218,6 +237,27 @@ class selfAttention(nn.Module):
       out = layer(out)
     return self.last_layer(out)
 
+class selfAttention1(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([selfAttentionBlock1(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = nn.Linear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = nn.Sequential(
+        act_fun(),
+        nn.Linear(hidden_size, output_size)
+      )
+    else:
+      self.last_layer = nn.Sequential(
+        act_fun(),
+        nn.Linear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
 
 class ComplexSelfAttentionBlock(nn.Module):
   def __init__(self, hidden_size, act_fun=None):
@@ -233,6 +273,22 @@ class ComplexSelfAttentionBlock(nn.Module):
   def forward(self, input):
     attended = self.value_linear(input) * self.weight_linear(input) + input
     out = self.ff_linear2( self.act_fun( self.ff_linear1(attended) ) ) + input
+    return out
+
+class ComplexSelfAttentionBlock1(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+    super().__init__()
+    self.value_linear = ComplexLinear(hidden_size, hidden_size)
+    self.weight_linear = ComplexLinear(hidden_size, hidden_size)
+    self.ff_linear1 = ComplexLinear(hidden_size, hidden_size)
+    self.ff_linear2 = ComplexLinear(hidden_size, hidden_size)
+    if act_fun is not None:
+      self.act_fun=act_fun()
+    else:
+      self.act_fun = Identity
+  def forward(self, input):
+    out = self.value_linear(self.act_fun(input)) * self.weight_linear(self.act_fun(input)) + input
+    out = self.ff_linear2( self.act_fun( self.ff_linear1(out) ) ) + out
     return out
 
 class ComplexSelfAttention(nn.Module):
@@ -256,6 +312,28 @@ class ComplexSelfAttention(nn.Module):
       out = layer(out)
     return self.last_layer(out)
 
+class ComplexSelfAttention1(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([ComplexSelfAttentionBlock1(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = ComplexLinear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = nn.Sequential(
+        act_fun(),
+        ComplexLinear(hidden_size, output_size)
+      )
+    else:
+      self.last_layer = nn.Sequential(
+        act_fun(),
+        ComplexLinear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
 class combination_block(nn.Module):
   def __init__(self, mult_size, out_size, act_fun):
     super().__init__()
@@ -264,6 +342,80 @@ class combination_block(nn.Module):
     self.rad_phase = rad_phase_act()
   def forward(self, input1, input2):
     return self.act_fun( self.linear( self.rad_phase( input1 * input2 )))
+
+class DumbCombinationBlock(nn.Module):
+  def __init__(self, mult_size, out_size, act_fun):
+    super().__init__()
+    self.linear = ComplexLinear( mult_size, out_size)
+    self.act_fun = act_fun()
+    self.to_complex = to_complex()
+  def forward(self, input1, input2):
+    return self.act_fun( self.linear( self.to_complex( input1 * input2 )))
+
+class LinearBlock(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.ff_linear1 = nn.Linear(hidden_size, hidden_size)
+      self.ff_linear2 = nn.Linear(hidden_size, hidden_size)
+      self.ff_norm = nn.LayerNorm(hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.act_fun( self.ff_norm(input) )
+    out = self.ff_linear2( self.act_fun( self.ff_linear1( out ))) + input
+    return out
+
+class ComplexLinearBlock(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.ff_linear1 = ComplexLinear(hidden_size, hidden_size)
+      self.ff_linear2 = ComplexLinear(hidden_size, hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.ff_linear2( self.act_fun( self.ff_linear1( self.act_fun( input )) )) + input
+    return out
+
+class FeedForward(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([LinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = nn.Linear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = nn.Linear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        nn.Linear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
+class ComplexFeedForward(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([ComplexLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = ComplexLinear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = ComplexLinear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        ComplexLinear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
 
 class lattice_block(nn.Module):
   def __init__(self, kernel_size, out_size, num_features, num_conv_layers, act_fun, lattice_sites, padding=1, padding_mode='circular'):
@@ -278,6 +430,36 @@ class lattice_block(nn.Module):
       act_fun()
     ) for _ in range(num_conv_layers - 1)])
     self.last_linear = nn.Linear(conv_out_size * num_features, out_size)
+    self.flatten_conv = nn.Flatten(start_dim=1, end_dim=-1)
+  def forward(self, input):
+    conv_out = self.conv_first(input)
+    for layer in self.conv_layers:
+      conv_out = layer(conv_out)
+    out = self.last_linear( self.flatten_conv(conv_out) )
+    return out
+
+class ResConv1d(nn.Module):
+  def __init__(self, in_channels, out_channels, kernel_size, act_fun, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros', device=None, dtype=None):
+    super().__init__()
+    self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=bias, padding_mode=padding_mode, device=device, dtype=dtype)
+    self.norm = nn.GroupNorm(1, in_channels)
+    self.act_fun = act_fun()
+  def forward(self, input):
+    out = self.act_fun( self.norm(input) )
+    return self.conv( out ) + input
+
+class ResLatticeBlock(nn.Module):
+  def __init__(self, kernel_size, out_size, num_features, num_conv_layers, act_fun, lattice_sites, padding=1, padding_mode='circular'):
+    super().__init__()
+    conv_out_size = lattice_sites + ( 2 * padding + 1 - kernel_size ) * num_conv_layers
+    self.conv_first = nn.Sequential(
+      nn.Conv1d(1, num_features, kernel_size=kernel_size, padding=padding, padding_mode=padding_mode),
+    )
+    self.conv_layers = nn.ModuleList([ResConv1d(num_features, num_features, kernel_size, act_fun, padding='same') for _ in range(num_conv_layers - 1)])
+    self.last_linear = nn.Sequential(
+      act_fun(),
+      nn.Linear(conv_out_size * num_features, out_size)
+    )
     self.flatten_conv = nn.Flatten(start_dim=1, end_dim=-1)
   def forward(self, input):
     conv_out = self.conv_first(input)

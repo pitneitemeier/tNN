@@ -33,7 +33,7 @@ def psi_init_x_forward(spins, lattice_sites):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 8
+    lattice_sites = 4
     
     h1 = []
     for l in range(lattice_sites):
@@ -63,12 +63,8 @@ if __name__=='__main__':
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
     val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, val_t_arr, val_h_params, MC_sampling=False)
     
-    ### universal seed for deterministic behaviour
-    #pl.seed_everything(42, workers=True)
-    
-    train_sampler = sampler.RandomSampler(lattice_sites, 16)
     #train_sampler = sampler.ExactSampler(lattice_sites)
-    #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
+    train_sampler = sampler.RandomSampler(lattice_sites, 16)
     #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=500)
     val_sampler = sampler.ExactSampler(lattice_sites)
 
@@ -76,38 +72,20 @@ if __name__=='__main__':
         val_condition=val_cond, val_h_params=val_h_params, val_t_arr=val_t_arr, 
         train_sampler=train_sampler, val_sampler=val_sampler, t_range=(0,3), num_workers=48)
     
-    #model = models.init_fixed.load_from_checkpoint('TFI8x_init_fixed_32_samples.ckpt')
-    #model = models.time_transformer(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward)
-    #model = models.init_fixed(lattice_sites=lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward)
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+    test_name = 'ParametrizedSelfAttention'
+    model = models.ParametrizedSelfAttention(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.CELU, kernel_size=3, num_conv_layers=3, num_conv_features=32, 
-        tNN_hidden=128, tNN_num_hidden=4, mult_size=1024, psi_hidden=64, psi_num_hidden=2)
-    #model = models.parametrized.load_from_checkpoint('transfer_test.ckpt')
-    #model.lr = 1e-4
-    #model.psi_init = psi_init_z_forward
-    #model = models.multConvModel.load_from_checkpoint('tmp.ckpt')
+        tNN_hidden=64, tNN_num_hidden=6, mult_size=512, psi_hidden=64, psi_num_hidden=3)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_4-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
-    #resume_from_checkpoint='TFI8x_init_fixed_slurm2.ckpt', 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=41,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=3,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=5,
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     trainer.fit(model, env)
-    #trainer.save_checkpoint('transfer_test_z.ckpt')
-    '''
-    trainer = pl.Trainer(resume_from_checkpoint='TFI4z_multconvdeep4.ckpt', gpus=1, auto_select_gpus=True, callbacks=[lr_monitor, checkpoint_callback],
-        max_epochs=40)
-    trainer.fit(model=model, datamodule=env)
-    trainer.save_checkpoint('TFI4z_multconvdeep5.ckpt')
-    '''
-    #trainer = pl.Trainer(resume_from_checkpoint='tmp.ckpt', gpus=1, auto_select_gpus=True)
-    #trainer.fit(model, env)
-
-    #utils.plot_results('TFI Model', model, obs, corr_list, val_t_arr, val_h_params, ED_magn, ED_susc, ED_corr, 'results/TFI4x/')
-    #print(ED_magn)
+    trainer.save_checkpoint(test_name+'.ckpt')
