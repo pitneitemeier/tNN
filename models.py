@@ -684,7 +684,7 @@ class ParametrizedFeedForward(tNN.Wave_Fun):
         self.scheduler = torch.optim.lr_scheduler.StepLR
         #self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
 
-        self.lattice_net = act.ResLatticeBlock(kernel_size, mult_size, num_conv_features, num_conv_layers, act_fun, self.lattice_sites)
+        self.lattice_net = act.lattice_block(kernel_size, mult_size, num_conv_features, num_conv_layers, act_fun, self.lattice_sites)
         self.tNN = act.FeedForward(input_size=1+num_h_params, output_size=mult_size, hidden_size=tNN_hidden, num_hidden_layers=tNN_num_hidden, act_fun=act_fun)
         self.combination_block = act.combination_block(mult_size, psi_hidden, act.complex_celu)
         self.psi = act.ComplexFeedForward(psi_hidden, 1, psi_hidden, psi_num_hidden, act.complex_celu)
