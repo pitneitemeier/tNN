@@ -9,7 +9,7 @@ class Condition(ABC):
         self.device = 'cpu'
 
     @abstractclassmethod
-    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+    def __call__(self, model, psi_s, spins, alpha):
         print('forward not yet implemented')
 
     @abstractclassmethod
@@ -66,7 +66,7 @@ class schrodinger_eq(Condition):
             self.h_mult[:, :, current_ind : current_ind + self.num_op_h_list[i+1]] = alpha[:, 0, i+1].reshape(-1, 1, 1)
             current_ind += self.num_op_h_list[i+1]
     
-    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+    def __call__(self, model, psi_s, spins, alpha):
         if not (model.device == self.device):
             self.to(model.device)
         sp_h = utils.get_sp(spins, self.h_map)
@@ -77,10 +77,48 @@ class schrodinger_eq(Condition):
         h_loc_sq_sum = (utils.abs_sq(h_loc)).sum(1)
         dt_psi_sq_sum = (utils.abs_sq(dt_psi_s)).sum(1)
         dt_psi_h_loc_sum = (torch.conj(dt_psi_s) * h_loc).sum(1)
-        #schroedinger_loss = torch.mean( torch.exp(- loss_weight * alpha[:, 0, 0]) * torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ))
         schroedinger_loss = torch.mean( torch.abs( h_loc_sq_sum + dt_psi_sq_sum - 2 * torch.imag(dt_psi_h_loc_sum) ) )
         return self.weight * schroedinger_loss
         
+class schrodinger_eq_per_config(Condition):
+    def __init__(self, h_list, lattice_sites, name, weight = 1):
+        super().__init__(weight)
+        h_tot = sum(h_list, [])
+        self.name = name
+        self.lattice_sites = lattice_sites
+        self.num_op_h_list = [len(x) for x in h_list]
+        self.num_summands_h = int(torch.tensor(self.num_op_h_list).sum())
+        self.h_mat = utils.get_total_mat_els(h_tot, lattice_sites)
+        self.h_map = utils.get_map(h_tot, lattice_sites)
+        self.h_mult = torch.zeros((1,1, self.num_summands_h))
+
+    def to(self, device):
+        self.h_map = self.h_map.to(device)
+        self.h_mat = self.h_mat.to(device)
+        self.h_mult = self.h_mult.to(device)
+        self.device = device
+    
+    def __str__(self):
+        return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
+
+    def update_h_mult(self, alpha):
+        self.h_mult = self.h_mult.new_ones(alpha.shape[0], 1, self.num_summands_h)
+        current_ind = self.num_op_h_list[0]
+        for i in range(alpha.shape[2] - 1):
+            self.h_mult[:, :, current_ind : current_ind + self.num_op_h_list[i+1]] = alpha[:, 0, i+1].reshape(-1, 1, 1)
+            current_ind += self.num_op_h_list[i+1]
+    
+    def __call__(self, model, psi_s, spins, alpha):
+        if not (model.device == self.device):
+            self.to(model.device)
+        sp_h = utils.get_sp(spins, self.h_map)
+        psi_sp_h = model.call_forward_sp(sp_h, alpha)
+        self.update_h_mult(alpha)
+        h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, spins, self.h_mult)
+        dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
+        schroedinger_per_config = utils.abs_sq(dt_psi_s + 1j * h_loc)
+        schroedinger_loss = torch.mean(schroedinger_per_config)
+        return self.weight * schroedinger_loss
 
 class init_observable(Condition):
     def __init__(self, obs, lattice_sites, name, init_t = 0, init_value = 1, weight=1):
@@ -100,7 +138,7 @@ class init_observable(Condition):
     def __str__(self):
         return f"{self.name} inital condition for {self.lattice_sites} lattice sites \n"
 
-    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+    def __call__(self, model, psi_s, spins, alpha):
         if not (model.device == self.device):
             self.to(model.device)
         alpha_init = alpha.detach().clone()
@@ -114,6 +152,30 @@ class init_observable(Condition):
         init_cond_loss = torch.mean( (utils.abs_sq( (psi_init_obs_loc_sum * (1 / psi_s_init_sq_sum)) - self.init_value)) )
         return self.weight * init_cond_loss
 
+class init_psi_per_config(Condition):
+    def __init__(self, psi_init, lattice_sites, name, init_t=0, weight=1):
+        super().__init__(weight)
+        self.psi_init = psi_init
+        self.lattice_sites = lattice_sites
+        self.name = name
+        self.init_t = init_t
+
+    def to(self, device):
+        self.device = device
+
+    def __str__(self):
+        return f'{self.name} initial condition per spin config'
+
+    def __call__(self, model, psi_s, spins, alpha):
+        if not (model.device == self.device):
+            self.to(model.device)
+        alpha_init = alpha.detach().clone()
+        alpha_init[:, :, 0] = self.init_t
+        psi_s_init_target = self.psi_init(spins)
+        psi_s_init = model.call_forward(spins, alpha_init)
+        init_cond_per_time = utils.abs_sq(psi_s_init - psi_s_init_target)
+        init_cond = torch.mean(init_cond_per_time)
+        return self.weight * init_cond
 
 class init_scalar_prod(Condition):
     def __init__(self, psi_init, lattice_sites, name, init_t=0, weight=1):
@@ -130,7 +192,7 @@ class init_scalar_prod(Condition):
     def __str__(self):
         return f'{self.name} initial condition via scalar prod'
 
-    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+    def __call__(self, model, psi_s, spins, alpha):
         if not (model.device == self.device):
             self.to(model.device)
         alpha_init = alpha.detach().clone()
@@ -156,7 +218,7 @@ class Norm(Condition):
     def __str__(self):
         return f'Norm_target = {self.norm_target}'
 
-    def __call__(self, model, psi_s, spins, alpha, loss_weight):
+    def __call__(self, model, psi_s, spins, alpha):
         if not (model.device == self.device):
             self.to(model.device)
         batched_norm = utils.psi_norm_sq(psi_s)
@@ -164,8 +226,9 @@ class Norm(Condition):
         return self.weight * norm_loss
 
 class ED_Validation(Val_Condition):
-    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params):
+    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params, MC_sampling=False):
         super().__init__()
+        self.MC_sampling = MC_sampling
         self.ED_data = torch.from_numpy(ED_data).type(torch.get_default_dtype())
         self.h_param = torch.from_numpy(val_h_params).type(torch.get_default_dtype())
         self.t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
@@ -186,16 +249,27 @@ class ED_Validation(Val_Condition):
     def __call__(self, model, spins, val_set_index):
         if not (model.device == self.device):
             self.to(model.device)
-        h_params = self.h_param[val_set_index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
-        t_arr = self.t_arr.reshape(-1,1,1)
-        alpha = torch.cat((t_arr, h_params), dim=2)
+        alpha = self.get_alpha(model, val_set_index)
         psi_s = model.call_forward(spins, alpha)
         sp_o = utils.get_sp(spins, self.obs_map)
         psi_sp_o = model.call_forward_sp(sp_o, alpha)
-        o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
+        if not self.MC_sampling:
+            o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
+            val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
+        else:
+            o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, self.obs_mat, spins)
+            val_loss, observable = utils.mc_val_loss(o_loc, self.ED_data[val_set_index, :])
         
-        val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
         return {'val_loss': val_loss, 'observable': observable, 
             'ED_observable': self.ED_data[val_set_index, :], 
             'val_h_param': self.h_param[val_set_index], 't_arr': self.t_arr}
+    
+    def get_alpha(self, model, val_set_index):
+        if not (model.device == self.device):
+            self.to(model.device)
+        h_params = self.h_param[val_set_index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
+        t_arr = self.t_arr.reshape(-1,1,1)
+        return torch.cat((t_arr, h_params), dim=2)
+
+
 

@@ -47,22 +47,7 @@ def get_one_hot(spin_config):
     1 dummy dimension for number of summands in hamiltonian (= #s')
   '''
   spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)), dim=2)
-  #print('one_hot dtpye:', spin_one_hot.dtype)
   return spin_one_hot.unsqueeze(3)
-
-def flat_one_hot(spin_config):
-  '''
-  Parameters
-  ----------
-  spin_config : tensor
-    shape = (batch, lattice_sites)
-  Returns
-  -------
-  spin_one_hot : tensor
-    shape = (batch, 2 * lattice_sites)
-  '''
-  spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)), dim=1)
-  return spin_one_hot
 
 
 #getting s_primes for O_loc via map
@@ -106,27 +91,55 @@ def calc_Oloc(psi_sp, mat_els, spin_config, ext_param_scale = None):
     the local energy
     shape = (num_alphas, num_spin_configs, 1)
   '''
-  #print('psi_sp, mat_els, spin_config shape: ', psi_sp.shape, mat_els.shape, spin_config.shape)
   #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
   s_onehot = get_one_hot(spin_config)
   #summing out zeroed values in dim 2
-  #print('mat_els shape ', mat_els.shape)
-  #print('s_onehot shape ', s_onehot.shape)
   res = (mat_els * s_onehot).sum(2)
-  #print('res_shape', res.shape)
   #product of all matrix elements for one summand of the hamiltonian.
   res = res.prod(3)
-  #print('res_shape', res.shape)
 
   #scaling all summands of the hamiltonian with external params
   if ext_param_scale is not None:
-    #print('res_shape', res.shape)
-    #print('ext_params_scale shape', ext_param_scale.shape)
     res = res * ext_param_scale
 
   #multiplying with corresponding wave function and summing over s' for each input configuration
-  #print("res, psi_sp shape: ",res.shape, psi_sp.shape)
   O_loc = (torch.conj(res.unsqueeze(3)) * psi_sp).sum(2)
+  return O_loc
+
+def calc_Oloc_MC(psi_sp, psi_s, mat_els, spin_config, ext_param_scale = None):
+  '''
+  Calculates the local Operator value divided by psi for MCMC Sampling
+  Parameters
+  ----------
+  psi_sp : tensor
+    shape = (num_alphas, num_spin_configs, num_sp, 1)
+    num_sp = num_summands_o
+  mat_els : tensor
+    shape = (num_alphas, num_spin_configs, 2, num_sp, num_lattice_sites)
+  spin_config : tensor
+    shape = (num_alphas, num_spin_configs, lattice_sites)
+  ext_param_scale : tensor
+    tensor with the external parameters of the hamiltonian to scale up matrix elements
+    shape = (num_alphas, num_spin_configs, num_sp, 1)
+  Returns
+  -------
+  O_loc : tensor
+    the local energy
+    shape = (num_alphas, num_spin_configs, 1)
+  '''
+  #using onehot encoding of spin config to select the correct mat_el from all mat_els table by multiplication
+  s_onehot = get_one_hot(spin_config)
+  #summing out zeroed values in dim 2
+  res = (mat_els * s_onehot).sum(2)
+  #product of all matrix elements for one summand of the hamiltonian.
+  res = res.prod(3)
+
+  #scaling all summands of the hamiltonian with external params
+  if ext_param_scale is not None:
+    res = res * ext_param_scale
+
+  #multiplying with corresponding wave function and summing over s' for each input configuration
+  O_loc = (torch.conj(res.unsqueeze(3)) * psi_sp).sum(2)/psi_s
   return O_loc
 
 
@@ -147,12 +160,9 @@ def get_all_spin_configs(num_lattice_sites):
 
 def calc_dt_psi(psi_s, alpha):
   #TODO documentation
-  #print('psi in derivative:', psi_s)
-  #print('dtype of psi_s.sum: ', psi_s.sum().dtype)
-  dt_psi_s_real = torch.autograd.grad(torch.real(psi_s.sum()), alpha, create_graph=True)[0][:,:, 0]
-  dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s.sum()), alpha, create_graph=True)[0][:,:, 0]
+  dt_psi_s_real = torch.autograd.grad(torch.real(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
+  dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
   dt_psi_s = dt_psi_s_real + 1.j * dt_psi_s_imag
-  #print('dtype of dt_psi: ', dt_psi_s.dtype)
   return dt_psi_s.unsqueeze(2)
 
 
@@ -174,20 +184,16 @@ def psi_norm_sq(psi_s):
 def val_loss(psi_s, o_loc, o_target):
   psi_sq_sum = (abs_sq(psi_s)).sum(1)
   psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-  observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze()
+  observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze()
   loss = (abs_sq((observable - o_target))).sum(0)
   return loss, torch.real(observable)
 
+def mc_val_loss(o_loc, o_target):
+  num_samples = o_loc.shape[1]
+  observable = o_loc.sum(1)/num_samples
+  loss = (abs_sq(observable - o_target)).sum()
+  return loss, torch.real(observable)
 
-def get_t_end(current_epoch, num_epochs, t_range, step_after = 1):
-  #calculate dynamic end time and decay rate for loss
-  n = int(current_epoch / step_after) + 1
-  N = int (num_epochs / step_after)
-  #t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
-  t_end = t_range[0] + (t_range[1] - t_range[0]) * n / N 
-  #t_max = self.t_max
-  loss_weight = 1e-2 / (t_end/t_range[1] + 1e-2)
-  return t_end, loss_weight
 
 def tensor_to_string(alist):
     format_list = ['{:.1f}' for item in alist] 
@@ -198,9 +204,8 @@ def get_susceptibility(magnetization, alpha):
   return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, :, 1].sum(1)
 
 import matplotlib.pyplot as plt
-def plot_results(name, model, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr, plot_folder):
-  device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
-  model = model.to(device)
+def plot_results(name, model, sampler, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr, plot_folder):
+  device = model.device
   assert(h_param_arr.shape[0] == ED_magn_arr.shape[0] == ED_susc_arr.shape[0] == ED_corr_arr.shape[0])
   t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
   tot_fig, tot_ax = plt.subplots(figsize=(10,6))
@@ -220,12 +225,12 @@ def plot_results(name, model, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn
           h_param_tens = torch.full((t_arr.shape[0], 1, 1), h_param)
       h_param_tens = h_param_tens.type(torch.get_default_dtype())
       alpha = torch.cat((t_arr.reshape(-1,1,1), h_param_tens), dim=2)
-      alpha = alpha.repeat(1, model.spins.shape[1], 1)
+      spins = sampler(model, alpha)
       alpha.requires_grad = True
       
-      magn = model.measure_observable(alpha, magn_op, model.lattice_sites)
+      magn = model.measure_observable(alpha, spins, magn_op)
       susc = get_susceptibility(magn, alpha)
-      corr = [model.measure_observable(alpha, corr, model.lattice_sites).detach() for corr in corr_op_list]
+      corr = [model.measure_observable(alpha, spins, corr).detach() for corr in corr_op_list]
       corr = torch.stack(corr)
       fig, ax = plt.subplots(4, 2, figsize=(10,6), sharex='col', gridspec_kw={'width_ratios': [20, 1], 'height_ratios': [2,2,1,1]})
       ax[0,1].axis('off')
