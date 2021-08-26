@@ -41,7 +41,14 @@ class complex_celu(nn.Module):
   def forward(self, x): 
     return self.celu(torch.real(x)) + 1j * self.celu(torch.imag(x))
 
+class complex_gelu(nn.Module):
+  def __init__(self):
+    super().__init__()
+    self.gelu = nn.GELU()
+  def forward(self, x): 
+    return self.gelu(torch.real(x)) + 1j * self.gelu(torch.imag(x))
 
+  
 class rad_phase_act(nn.Module):
   def __init__(self):
     super().__init__()
