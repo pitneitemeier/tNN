@@ -1,7 +1,6 @@
 from torch import nn
 import torch
 
-
 class even_act(nn.Module):
   def __init__(self):
     super().__init__()
@@ -14,11 +13,6 @@ class odd_act(nn.Module):
   def forward(self, x):
     return x - x**3 / 3 + x**5 * (2 / 15)
 
-class complex_act(nn.Module):
-  def __init__(self):
-    super().__init__()
-  def forward(self, x):
-    return (torch.tanh(torch.real(x)) + 1j * torch.tanh(torch.imag(x)))
 
 class complex_relu(nn.Module):
   def __init__(self):
@@ -67,7 +61,7 @@ class rad_phase_conv_act(nn.Module):
     return ret
 
 
-class Euler_act(nn.Module):
+class euler_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
@@ -156,29 +150,6 @@ def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
-class parallel_Linear(nn.Module):
-  def __init__(self, in_features, out_features, num_heads, bias=True, device=None, dtype=None):
-      super().__init__()
-      self.layers = nn.ModuleList([nn.Linear(in_features, out_features, bias=bias, device=device, dtype=dtype) for _ in range(num_heads)])
-  def forward(self, input):
-    return torch.stack([layer(input) for layer in self.layers], dim=2)
-
-import torch.nn.functional as F
-class time_attention(nn.Module):
-  def __init__(self, mult_size, num_heads):
-    super().__init__()
-    self.t_embed = parallel_Linear(in_features=mult_size, out_features=int(mult_size/num_heads), num_heads=num_heads)
-    self.lat_embed = parallel_Linear(mult_size, int(mult_size/num_heads), num_heads)
-    self.value_embed = parallel_Linear(mult_size * 2, int(mult_size/num_heads), num_heads)
-    self.linear_out = nn.Linear(mult_size, mult_size)
-    
-  def forward(self, t_inp, lat_inp):
-    t_embed = self.t_embed(t_inp)
-    lat_emb = self.lat_embed(lat_inp)
-    value_emb = self.value_embed( torch.cat((t_inp, lat_inp), dim=1))
-    att_weights = F.softmax( t_embed * lat_emb, dim=1)
-    out = self.linear_out( (att_weights * value_emb).reshape(t_inp.shape) )
-    return out
 
 class Identity(nn.Module):
   def __init__(self):

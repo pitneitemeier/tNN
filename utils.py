@@ -47,22 +47,7 @@ def get_one_hot(spin_config):
     1 dummy dimension for number of summands in hamiltonian (= #s')
   '''
   spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)), dim=2)
-  #print('one_hot dtpye:', spin_one_hot.dtype)
   return spin_one_hot.unsqueeze(3)
-
-def flat_one_hot(spin_config):
-  '''
-  Parameters
-  ----------
-  spin_config : tensor
-    shape = (batch, lattice_sites)
-  Returns
-  -------
-  spin_one_hot : tensor
-    shape = (batch, 2 * lattice_sites)
-  '''
-  spin_one_hot = torch.stack((0.5*(spin_config+1), 0.5*(1-spin_config)), dim=1)
-  return spin_one_hot
 
 
 #getting s_primes for O_loc via map
@@ -175,12 +160,9 @@ def get_all_spin_configs(num_lattice_sites):
 
 def calc_dt_psi(psi_s, alpha):
   #TODO documentation
-  #print('psi in derivative:', psi_s)
-  #print('dtype of psi_s.sum: ', psi_s.sum().dtype)
-  dt_psi_s_real = torch.autograd.grad(torch.real(psi_s.sum()), alpha, create_graph=True)[0][:,:, 0]
-  dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s.sum()), alpha, create_graph=True)[0][:,:, 0]
+  dt_psi_s_real = torch.autograd.grad(torch.real(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
+  dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
   dt_psi_s = dt_psi_s_real + 1.j * dt_psi_s_imag
-  #print('dtype of dt_psi: ', dt_psi_s.dtype)
   return dt_psi_s.unsqueeze(2)
 
 
@@ -212,15 +194,6 @@ def mc_val_loss(o_loc, o_target):
   loss = (abs_sq(observable - o_target)).sum()
   return loss, torch.real(observable)
 
-def get_t_end(current_epoch, num_epochs, t_range, step_after = 1):
-  #calculate dynamic end time and decay rate for loss
-  n = int(current_epoch / step_after) + 1
-  N = int (num_epochs / step_after)
-  #t_end = t_range[0] + (t_range[1] - t_range[0]) * np.log(10 * n / N + 1) / np.log( 11 )
-  t_end = t_range[0] + (t_range[1] - t_range[0]) * n / N 
-  #t_max = self.t_max
-  loss_weight = 1e-2 / (t_end/t_range[1] + 1e-2)
-  return t_end, loss_weight
 
 def tensor_to_string(alist):
     format_list = ['{:.1f}' for item in alist] 
