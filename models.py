@@ -7,7 +7,7 @@ import math
 
 class parametrized(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, init_decay=1, patience=0, optimizer=torch.optim.Adam):
-        super().__init__(lattice_sites = lattice_sites)
+        super().__init__(lattice_sites = lattice_sites, name='parametrized')
         if mult_size % 2 != 0:
             mult_size+=1
         self.save_hyperparameters()
@@ -40,7 +40,7 @@ class parametrized(tNN.Wave_Fun):
 
 class ParametrizedFeedForward(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, init_decay=1, patience=0, optimizer=torch.optim.Adam):
-        super().__init__(lattice_sites = lattice_sites)
+        super().__init__(lattice_sites = lattice_sites, name='FF')
         if mult_size % 2 != 0:
             mult_size+=1
         self.save_hyperparameters()
@@ -73,7 +73,7 @@ class ParametrizedFeedForward(tNN.Wave_Fun):
 
 class ParametrizedSelfAttention(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, init_decay=1, patience=0, optimizer=torch.optim.Adam):
-        super().__init__(lattice_sites = lattice_sites)
+        super().__init__(lattice_sites = lattice_sites, name='SA')
         if mult_size % 2 != 0:
             mult_size+=1
         self.save_hyperparameters()

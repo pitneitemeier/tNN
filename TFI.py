@@ -33,7 +33,7 @@ def psi_init_x_forward(spins, lattice_sites):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 4
+    lattice_sites = 8
     
     h1 = []
     for l in range(lattice_sites):
@@ -74,7 +74,7 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=6e5)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=100)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, train_batch_size=50, val_batch_size=50, num_workers=24)
@@ -85,13 +85,13 @@ if __name__=='__main__':
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename='TFI_4-{epoch:02d}-{val_loss:.2f}')
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=1,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=1,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
         deterministic=False, progress_bar_refresh_rate=5,
-        accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
+        )#accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     trainer.fit(model, env)
    
