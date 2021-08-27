@@ -10,7 +10,6 @@ from collections import Sequence
 import sampler
 
 class Environment(LightningDataModule):
-    
     def __init__(self, train_condition, val_condition, train_batch_size, val_batch_size, num_workers=0):
         super().__init__()
         self.train_condition = train_condition
@@ -30,9 +29,10 @@ class Environment(LightningDataModule):
         return DataLoader(self.val_data, self.val_batch_size, num_workers=self.num_workers)
 
 class Wave_Fun(LightningModule):
-    def __init__(self, lattice_sites):
+    def __init__(self, lattice_sites, name):
         super().__init__()
         self.lattice_sites = lattice_sites
+        self.name = name
 
     def call_forward(self, spins, alpha):
         '''
