@@ -11,20 +11,16 @@ import sampler
 
 class Environment(LightningDataModule):
     
-    def __init__(self, condition_list, h_param_range, val_condition, train_batch_size, val_batch_size, train_sampler, t_range = (0,1), num_workers=0, epoch_len=100000):
+    def __init__(self, train_condition, val_condition, train_batch_size, val_batch_size, num_workers=0):
         super().__init__()
-        self.condition_list = condition_list
+        self.train_condition = train_condition
         self.val_condition = val_condition
-        self.train_sampler = train_sampler
-        self.h_param_range = h_param_range
-        self.t_range = t_range
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.num_workers = num_workers
-        self.epoch_len = epoch_len
 
     def setup(self, stage: Optional[str] = None):
-        self.train_data = Datasets.Train_Data(self.t_range, self.h_param_range, self.epoch_len)
+        self.train_data = self.train_condition.get_dataset()
         self.val_data = self.val_condition.get_dataset()
 
     def train_dataloader(self):
@@ -96,24 +92,8 @@ class Wave_Fun(LightningModule):
         psi = self(sprimes_flat, alpha_flat)
         return psi.reshape( alpha_shape[0], sprimes_shape[1], sprimes_shape[2], 1)
 
-    def training_step(self, alpha, batch_idx):
-        spins = self.trainer.datamodule.train_sampler(self, alpha, batch_idx)
-
-        #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
-        if (alpha.shape[1] == 1):
-            alpha = alpha.repeat(1, spins.shape[1], 1)
-        #gradient needed for dt_psi
-        alpha.requires_grad = True
-
-        #calculate psi_s only once since it is needed for many conditions
-        psi_s = self.call_forward(spins, alpha)
-        
-        loss = torch.zeros(1, device=self.device, requires_grad=True)
-        for condition in self.trainer.datamodule.condition_list:
-            cond_loss = condition(self, psi_s, spins, alpha)
-            self.log(condition.name, cond_loss, logger=True, prog_bar=False)
-            loss = loss + cond_loss
-        
+    def training_step(self, data_dict, batch_idx):
+        loss = self.trainer.datamodule.train_condition(self, data_dict)
         self.log('train_loss', loss, logger=True)
         return {'loss' :loss}
 

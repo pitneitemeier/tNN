@@ -22,25 +22,25 @@ class Train_Data(Dataset):
             dummy batch index
         Returns
         -------
-        alpha_arr : tensor
+        alpha : tensor
             shape = (num_spin_configs, num_ext_params + time)
         alpha_0 : tensor
-            same as alpha_arr but with t=0 to satisfy init cond
+            same as alpha but with t=0 to satisfy init cond
         ext_param_scale : tensor
             tensor to scale matrix elements of hamiltonian according to external parameters
             shape = (num_spin_configs, num_summands_h, 1)
         '''
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)‚
         if self.h_param_range is not None:
-            alpha_arr = torch.zeros((1, (len(self.h_param_range) + 1))) 
+            alpha = torch.zeros((1, (len(self.h_param_range) + 1))) 
             for i in range( len(self.h_param_range) ):
                 max = self.h_param_range[i][1]
                 min = self.h_param_range[i][0] 
-                alpha_arr[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
+                alpha[:, i+1] = ( (max - min) * torch.rand((1,1)) + min )
         else:
-            alpha_arr = torch.zeros((1,1)) 
-        alpha_arr[:, 0] = (self.t_range[1] - self.t_range[0]) * torch.rand(1,1) + self.t_range[0]
-        return alpha_arr
+            alpha = torch.zeros((1,1)) 
+        alpha[:, 0] = (self.t_range[1] - self.t_range[0]) * torch.rand(1,1) + self.t_range[0]
+        return {'alpha': alpha}
 
 
 class Val_Data(Dataset):
