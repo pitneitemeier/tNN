@@ -20,14 +20,14 @@ def psi_init_z(spins):
     return (spins.sum(2) == spins.shape[2]).type(torch.get_default_dtype())
 
 def psi_init_z_forward(spins, lattice_sites):
-    return (spins.sum(1) == spins.shape[1]).type(torch.get_default_dtype()).unsqueeze(1)
+    return (spins.sum(1) == spins.shape[1]).type(torch.get_default_dtype()).unsqueeze(1)*(2**lattice_sites)
 
 def psi_init_x(spins):
     lattice_sites = spins.shape[2]
     return torch.full_like(spins, 2**(- lattice_sites / 2))
 
 def psi_init_x_forward(spins, lattice_sites):
-    return torch.full_like(spins[:, :1], 2**(- lattice_sites / 2))
+    return torch.full_like(spins[:, :1], 1)
 
 
 
@@ -62,10 +62,6 @@ if __name__=='__main__':
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
     h_param_range = [(0.15, 1.4)]
 
-    
-    ### universal seed for deterministic behaviour
-    #pl.seed_everything(42, workers=True)
-    
     train_sampler = sampler.RandomSampler(lattice_sites, 16)
     #train_sampler = sampler.ExactSampler(lattice_sites)
     #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
@@ -77,8 +73,8 @@ if __name__=='__main__':
         h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=100)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
-    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, train_batch_size=50, val_batch_size=50, num_workers=24)
-    
+    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, 
+        train_batch_size=50, val_batch_size=50, num_workers=24)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24, 
         tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3)
