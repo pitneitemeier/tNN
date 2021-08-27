@@ -73,12 +73,11 @@ if __name__=='__main__':
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
+    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=6e5)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
-    env = tNN.Environment(condition_list=[schrodinger], h_param_range=h_param_range, train_batch_size=50, val_batch_size=50, epoch_len=6e5, 
-        val_condition=val_cond,
-        train_sampler=train_sampler, t_range=(0,3), num_workers=24)
+    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, train_batch_size=50, val_batch_size=50, num_workers=24)
     
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24, 
