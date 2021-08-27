@@ -44,16 +44,23 @@ class Train_Data(Dataset):
 
 
 class Val_Data(Dataset):
-    def __init__(self, val_h_params):
-        self.num_val_h_params = val_h_params.shape[0]
+    def __init__(self, alpha, ED_data):
+        self.len = alpha.shape[0]*alpha.shape[1] # #val sets * #t_val per set
+        self.num_t_val = alpha.shape[1]
+        self.alpha = alpha.flatten(0,1)
+        self.ED_data = ED_data.flatten(0,1)
         
     def __len__(self):
-        return self.num_val_h_params
+        return self.len
 
     def __getitem__(self, index):
-        return index
+        return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 'ED_data': self.ED_data[index]}
 
 
 
 if (__name__ == '__main__'):
-   pass 
+   alpha = torch.cat((torch.arange(0, 10).reshape(1,-1,1).repeat(4, 1, 1), torch.arange(0,4).reshape(-1,1,1).repeat(1, 10, 1)), 2)
+   dataset = Val_Data(alpha)
+   dataloader = DataLoader(dataset, 13)
+   dataiter = iter(dataloader)
+   print(next(dataiter))

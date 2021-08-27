@@ -33,7 +33,7 @@ def psi_init_x_forward(spins, lattice_sites):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 8
+    lattice_sites = 4
     
     h1 = []
     for l in range(lattice_sites):
@@ -45,7 +45,7 @@ if __name__=='__main__':
     
     h_list = [h1, h2]
 
-    obs = ex_op.avg_magnetization(op.Sx, lattice_sites)
+    magn_op = ex_op.avg_magnetization(op.Sx, lattice_sites)
     corr_list = [ex_op.avg_correlation(op.Sz, d+1, lattice_sites) for d in range(int(lattice_sites/2))]
 
     ### loading ED Data for Validation
@@ -53,15 +53,15 @@ if __name__=='__main__':
     append = '_0.2_1.3.csv'
     val_h_params = np.loadtxt(folder + 'h_params' + append, delimiter=',')
     val_t_arr = np.loadtxt(folder + 't_arr' + append, delimiter=',')
+    val_alpha = np.concatenate(
+        (np.broadcast_to(val_t_arr.reshape(1,-1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1)), 
+        np.broadcast_to(val_h_params.reshape(-1,1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1))), 2)
     print('validating on h= ', val_h_params)
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
     ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
     h_param_range = [(0.15, 1.4)]
 
-    ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
-    val_cond = cond.ED_Validation(obs, lattice_sites, ED_magn, val_t_arr, val_h_params, MC_sampling=False)
     
     ### universal seed for deterministic behaviour
     #pl.seed_everything(42, workers=True)
@@ -72,13 +72,17 @@ if __name__=='__main__':
     #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=500)
     val_sampler = sampler.ExactSampler(lattice_sites)
 
-    env = tNN.Environment(condition_list=[schrodinger], h_param_range=h_param_range, batch_size=50, epoch_len=8e5, 
-        val_condition=val_cond, val_h_params=val_h_params, val_t_arr=val_t_arr, 
-        train_sampler=train_sampler, val_sampler=val_sampler, t_range=(0,3), num_workers=48)
+    ### define conditions that have to be satisfied
+    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI')
+    val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
+
+    env = tNN.Environment(condition_list=[schrodinger], h_param_range=h_param_range, train_batch_size=50, val_batch_size=50, epoch_len=6e5, 
+        val_condition=val_cond,
+        train_sampler=train_sampler, t_range=(0,3), num_workers=24)
     
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-4, psi_init=psi_init_x_forward,
-        act_fun=nn.CELU, kernel_size=3, num_conv_layers=3, num_conv_features=32, 
-        tNN_hidden=64, tNN_num_hidden=6, mult_size=512, psi_hidden=64, psi_num_hidden=3)
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24, 
+        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint

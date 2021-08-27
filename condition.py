@@ -1,3 +1,4 @@
+import Datasets
 import torch
 import utils
 import matplotlib.pyplot as plt
@@ -226,12 +227,13 @@ class Norm(Condition):
         return self.weight * norm_loss
 
 class ED_Validation(Val_Condition):
-    def __init__(self, obs, lattice_sites, ED_data, t_arr, val_h_params, MC_sampling=False):
+    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler):
         super().__init__()
-        self.MC_sampling = MC_sampling
+        self.sampler = sampler
+        self.MC_sampling = sampler.is_MC
         self.ED_data = torch.from_numpy(ED_data).type(torch.get_default_dtype())
-        self.h_param = torch.from_numpy(val_h_params).type(torch.get_default_dtype())
-        self.t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
+        self.val_names = val_names
+        self.alpha = torch.from_numpy(alpha).type(torch.get_default_dtype())
         self.obs_mat = utils.get_total_mat_els(obs, lattice_sites)
         self.obs_map = utils.get_map(obs, lattice_sites)
 
@@ -239,37 +241,56 @@ class ED_Validation(Val_Condition):
         self.ED_data = self.ED_data.to(device)
         self.obs_map = self.obs_map.to(device)
         self.obs_mat = self.obs_mat.to(device)
-        self.t_arr = self.t_arr.to(device)
-        self.h_param = self.h_param.to(device)
         self.device = device
 
     def __str__(self):
         return f'Condition to match ED_data'
 
-    def __call__(self, model, spins, val_set_index):
+    def __call__(self, model, data_dict):
         if not (model.device == self.device):
             self.to(model.device)
-        alpha = self.get_alpha(model, val_set_index)
-        psi_s = model.call_forward(spins, alpha)
-        sp_o = utils.get_sp(spins, self.obs_map)
-        psi_sp_o = model.call_forward_sp(sp_o, alpha)
-        if not self.MC_sampling:
-            o_loc = utils.calc_Oloc(psi_sp_o, self.obs_mat, spins)
-            val_loss, observable = utils.val_loss(psi_s, o_loc, self.ED_data[val_set_index, :])
-        else:
-            o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, self.obs_mat, spins)
-            val_loss, observable = utils.mc_val_loss(o_loc, self.ED_data[val_set_index, :])
+        observable = model.measure_observable_compiled(data_dict['alpha'], self.sampler, self.obs_mat, self.obs_map)
+        loss = torch.mean(torch.abs(data_dict['ED_data'] - observable)**2)
+        data_dict['t'] = data_dict['alpha'][:, 0, 0]
+        del data_dict['alpha']
+        data_dict['observable'] = observable
+        return loss, data_dict
+
+    def get_num_val_sets(self):
+        return len(self.val_names)
+
+    def get_val_set_name(self, val_set_idx):
+        return f'{self.val_names[val_set_idx]:.1f}'
+
+    def get_dataset(self):
+        return Datasets.Val_Data(self.alpha, self.ED_data)
+
+    def plot_results(self, model, res_dict):
+        # transform from dict of tensors into list of dicts for sorting
+        res_list = []
+        for i in range(len(res_dict['val_set_idx'])):
+            temp = {}
+            for key in res_dict:
+                temp[key] = res_dict[key][i]
+            res_list.append(temp)
+
+        res_list.sort(key=lambda entry: entry['t'])
+        res_list.sort(key=lambda entry: entry['val_set_idx'])
         
-        return {'val_loss': val_loss, 'observable': observable, 
-            'ED_observable': self.ED_data[val_set_index, :], 
-            'val_h_param': self.h_param[val_set_index], 't_arr': self.t_arr}
-    
-    def get_alpha(self, model, val_set_index):
-        if not (model.device == self.device):
-            self.to(model.device)
-        h_params = self.h_param[val_set_index].reshape(1, 1, -1).repeat(self.t_arr.shape[0], 1, 1)
-        t_arr = self.t_arr.reshape(-1,1,1)
-        return torch.cat((t_arr, h_params), dim=2)
-
-
-
+        fig, ax = plt.subplots(figsize=(10,6))
+        ax.set_xlabel('t')
+        ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
+        tot_title = f'Magnetization for {model.lattice_sites} Spins'
+        ax.set_title(tot_title)
+        dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
+        num_t_values = self.alpha.shape[1]
+        for i in range(int(len(res_list)/num_t_values)):
+            res_dict = {key: [dict[key].item() for dict in res_list[i*num_t_values:(i+1)*num_t_values]] for key in res_list[0]}
+            #print(res_dict['val_set_idx'])
+            val_set_idx, t_arr, observable, ED_observable = res_dict['val_set_idx'][0], res_dict['t'], res_dict['observable'], res_dict['ED_data']
+            label = self.get_val_set_name(val_set_idx)
+            ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
+            ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
+        ax.legend()
+        fig.savefig(tot_title + f'.png')
+        plt.close(fig)
