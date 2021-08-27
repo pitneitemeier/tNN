@@ -159,7 +159,7 @@ def get_all_spin_configs(num_lattice_sites):
 
 
 def calc_dt_psi(psi_s, alpha):
-  #TODO documentation
+  #need to do real and imaginary part separately so pytorch can treat it as a real differentiation
   dt_psi_s_real = torch.autograd.grad(torch.real(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
   dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s).sum(), alpha, create_graph=True)[0][:,:, 0]
   dt_psi_s = dt_psi_s_real + 1.j * dt_psi_s_imag

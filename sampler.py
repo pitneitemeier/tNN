@@ -9,6 +9,7 @@ class BaseSampler(ABC):
         super().__init__()
         self.lattice_sites = lattice_sites
         self.device = 'cpu'
+        self.is_MC = False
 
     @abstractclassmethod
     def __call__(self, model, alpha, val_set_index):
@@ -54,6 +55,7 @@ class MCMCSampler(BaseSampler):
         super().__init__(lattice_sites)
         self.num_samples = num_samples
         self.steps_to_equilibrium = steps_to_equilibrium
+        self.is_MC = True
 
     def _update_sample(self, model, alpha, current_sample, current_prob):
         proposed_sample = single_flip(current_sample)
@@ -76,6 +78,7 @@ class MCMCSamplerChains(BaseSampler):
     '''MCMC Sampler that uses one chain per alpha value'''
     def __init__(self, lattice_sites, num_samples, steps_to_equilibrium):
         super().__init__(lattice_sites)
+        self.is_MC = True
         self.num_samples = num_samples
         self.steps_to_equilibrium = steps_to_equilibrium
 
