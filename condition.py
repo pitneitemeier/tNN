@@ -82,6 +82,63 @@ class schrodinger_eq_per_config(Condition):
     def get_dataset(self):
         return Datasets.Train_Data(self.t_range, self.h_param_range, self.epoch_len)
 
+class schrodinger_eq_rescaled(Condition):
+    def __init__(self, h_list, lattice_sites, sampler, t_range, h_param_range, epoch_len, name, weight = 1):
+        super().__init__()
+        self.weight = weight
+        h_tot = sum(h_list, [])
+        self.name = name
+        self.t_range = t_range
+        self.h_param_range = h_param_range
+        self.epoch_len = epoch_len
+        self.sampler = sampler
+        self.lattice_sites = lattice_sites
+        self.num_op_h_list = [len(x) for x in h_list]
+        self.num_summands_h = int(torch.tensor(self.num_op_h_list).sum())
+        self.h_mat = utils.get_total_mat_els(h_tot, lattice_sites)
+        self.h_map = utils.get_map(h_tot, lattice_sites)
+        self.h_mult = torch.zeros((1,1, self.num_summands_h))
+
+    def to(self, device):
+        self.h_map = self.h_map.to(device)
+        self.h_mat = self.h_mat.to(device)
+        self.h_mult = self.h_mult.to(device)
+        self.device = device
+    
+    def __str__(self):
+        return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
+
+    def update_h_mult(self, alpha):
+        self.h_mult = self.h_mult.new_ones(alpha.shape[0], 1, self.num_summands_h)
+        current_ind = self.num_op_h_list[0]
+        for i in range(alpha.shape[2] - 1):
+            self.h_mult[:, :, current_ind : current_ind + self.num_op_h_list[i+1]] = alpha[:, 0, i+1].reshape(-1, 1, 1)
+            current_ind += self.num_op_h_list[i+1]
+    
+    def __call__(self, model, data_dict):
+        if not (model.device == self.device):
+            self.to(model.device)
+        alpha = data_dict['alpha']
+        spins = self.sampler(self, alpha)
+
+        #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
+        if (alpha.shape[1] == 1):
+            alpha = alpha.repeat(1, spins.shape[1], 1)
+        #gradient needed for dt_psi
+        alpha.requires_grad = True
+
+        psi_s = model.call_forward(spins, alpha)
+        sp_h = utils.get_sp(spins, self.h_map)
+        psi_sp_h = model.call_forward_sp(sp_h, alpha)
+        self.update_h_mult(alpha)
+        h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, spins, self.h_mult)
+        dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
+        schroedinger_per_config = utils.abs_sq(dt_psi_s + 1j * h_loc)/(utils.abs_sq(psi_s) + 1e-8)
+        schroedinger_loss = torch.mean(schroedinger_per_config)
+        return self.weight * schroedinger_loss
+
+    def get_dataset(self):
+        return Datasets.Train_Data(self.t_range, self.h_param_range, self.epoch_len)
 
 
 class ED_Validation(Condition):

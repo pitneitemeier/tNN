@@ -10,11 +10,11 @@ from collections import Sequence
 import sampler
 
 class Environment(LightningDataModule):
-    def __init__(self, train_condition, val_condition, train_batch_size, val_batch_size, num_workers=0):
+    def __init__(self, train_condition, val_condition, batch_size, val_batch_size, num_workers=0):
         super().__init__()
         self.train_condition = train_condition
         self.val_condition = val_condition
-        self.train_batch_size = train_batch_size
+        self.batch_size = batch_size
         self.val_batch_size = val_batch_size
         self.num_workers = num_workers
 
@@ -23,7 +23,7 @@ class Environment(LightningDataModule):
         self.val_data = self.val_condition.get_dataset()
 
     def train_dataloader(self):
-        return DataLoader(self.train_data, self.train_batch_size, num_workers=self.num_workers)
+        return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
         return DataLoader(self.val_data, self.val_batch_size, num_workers=self.num_workers)
