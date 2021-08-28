@@ -62,7 +62,7 @@ if __name__=='__main__':
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
     h_param_range = [(0.15, 1.4)]
 
-    train_sampler = sampler.RandomSampler(lattice_sites, 1)
+    train_sampler = sampler.RandomSampler(lattice_sites, 80)
     #train_sampler = sampler.ExactSampler(lattice_sites)
     #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
     #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=500)
@@ -70,11 +70,11 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=1e7)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=4e5)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, 
-        batch_size=10000, val_batch_size=50, num_workers=24)
+        batch_size=50, val_batch_size=50, num_workers=24)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
         tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3)
@@ -91,4 +91,4 @@ if __name__=='__main__':
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     #trainer.tune(model, env)
     trainer.fit(model, env)
-    trainer.save_checkpoint('TFI8x_FF_1.ckpt')
+    trainer.save_checkpoint(f'TFI{lattice_sites}x_FF_1.ckpt')

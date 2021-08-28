@@ -9,7 +9,7 @@ import torch
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 2**(- lattice_sites / 2))
 
-lattice_sites = 10
+lattice_sites = 4
     
 h1 = []
 for l in range(lattice_sites):
@@ -34,12 +34,12 @@ ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
 ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
 h_param_range = [(0.15, 1.4)]
 
-model = models.parametrized.load_from_checkpoint('TFI10x_parametrized_slurm1.ckpt')
-#model.to('cuda')
+model = models.ParametrizedFeedForward.load_from_checkpoint('TFI4x_FF_1.ckpt')
+model.to('cuda')
 print(model.device)
 sampler = sampler.ExactSampler(lattice_sites)
 utils.plot_results('TFIx', model, sampler, obs, corr_list, val_t_arr, val_h_params, 
-    ED_magn, ED_susc, ED_corr, 'results/TFI10x')
+    ED_magn, ED_susc, ED_corr, 'results/TFI4x/')
 
 
 
