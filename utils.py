@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-def get_map(operator, lattice_sites):
+def get_map(operator, lattice_sites, device='cpu'):
   '''
   Parameters
   ----------
@@ -14,19 +14,20 @@ def get_map(operator, lattice_sites):
       shape = (1, 1, num_summands_o, lattice_sites)
       two dummy dimensions for batch
   '''
-  map = torch.ones((1, 1, len(operator), lattice_sites), dtype=torch.int8)
+  map = torch.ones((1, 1, len(operator), lattice_sites), dtype=torch.int8, device=device)
   for i, op_tuple in enumerate(operator):
     for op in op_tuple:
       map[:, :, i, op.lat_site] = op.switching_map
   return map
 
 
-def get_total_mat_els(operator, lattice_sites):
-#1.dim: Batch
-#2.dim: two possibilities for mat el depending on input first=+1, second=-1
-#3.dim: Number of summands in operator
-#4.dim: number of lattice sites
-  mat_els = torch.ones((1, 1, 2, len(operator), lattice_sites), dtype=torch.complex64)
+def get_total_mat_els(operator, lattice_sites, device='cpu'):
+#1.dim: alpha Batch
+#2.dim: spin batch
+#3.dim: two possibilities for mat el depending on input first=+1, second=-1
+#4.dim: Number of summands in operator
+#5.dim: number of lattice sites
+  mat_els = torch.ones((1, 1, 2, len(operator), lattice_sites), dtype=torch.complex64, device=device)
   for i, op_tuple in enumerate(operator):
     for op in op_tuple:
       mat_els[:, :, :, i, op.lat_site] = op.mat_els
@@ -203,98 +204,45 @@ def tensor_to_string(alist):
 def get_susceptibility(magnetization, alpha):
   return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, :, 1].sum(1)
 
-import matplotlib.pyplot as plt
-def plot_results(name, model, sampler, magn_op, corr_op_list, t_arr, h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr, plot_folder):
-  device = model.device
-  assert(h_param_arr.shape[0] == ED_magn_arr.shape[0] == ED_susc_arr.shape[0] == ED_corr_arr.shape[0])
-  t_arr = torch.from_numpy(t_arr).type(torch.get_default_dtype())
-  tot_fig, tot_ax = plt.subplots(figsize=(10,6))
-  tot_ax.set_xlabel('ht')
-  magn_name = magn_op[0][0].name
-  corr_name = corr_op_list[0][0][0].name
-  tot_ax.set_ylabel(r'$ \langle '+ magn_name +r' \rangle$', fontsize=13)
-  tot_title = f'{name}, {model.lattice_sites} Spins'
-  tot_ax.set_title(tot_title)
-  dummy_lines = [tot_ax.plot([], [], c='black', ls='--', label='ED'), tot_ax.plot([], [], c='black', label='tNN')]
-  i=0
-  for h_param, ED_magn, ED_susc, ED_corr in zip(h_param_arr, ED_magn_arr, ED_susc_arr, ED_corr_arr):
-      from collections import Sequence
-      if isinstance(h_param, Sequence):
-          h_param_tens = torch.tensor(h_param).reshape(1,1,-1).repeat(t_arr.shape[0])
-      else:
-          h_param_tens = torch.full((t_arr.shape[0], 1, 1), h_param)
-      h_param_tens = h_param_tens.type(torch.get_default_dtype())
-      alpha = torch.cat((t_arr.reshape(-1,1,1), h_param_tens), dim=2)
-      spins = sampler(model, alpha)
-      alpha.requires_grad = True
-      
-      magn = model.measure_observable(alpha, spins, magn_op)
-      susc = get_susceptibility(magn, alpha)
-      corr = [model.measure_observable(alpha, spins, corr).detach() for corr in corr_op_list]
-      corr = torch.stack(corr)
-      fig, ax = plt.subplots(4, 2, figsize=(10,6), sharex='col', gridspec_kw={'width_ratios': [20, 1], 'height_ratios': [2,2,1,1]})
-      ax[0,1].axis('off')
-      ax[1,1].axis('off')
-      if isinstance(h_param, Sequence):
-          label = f'$h={tensor_to_string(h_param)} h_c$'
-      else:
-          label = f'$h={h_param} h_c$'
-      title = tot_title + ', ' + label
-      ax[0,0].set_title(title)
-      tot_ax.plot(t_arr, magn.detach().cpu(), label=label, c=f'C{i}')
-      tot_ax.plot(t_arr, ED_magn, ls='--', c=f'C{i}')
+def calc_h_mult(model, alpha, h_mat_list):
+    assert(alpha.shape[1]==1)
+    num_summands = sum([tensor.shape[3] for tensor in h_mat_list])
+    h_mult = torch.ones(alpha.shape[0], 1, num_summands, device=model.device)
+    current_ind = h_mat_list[0].shape[3]
+    for i in range(alpha.shape[2] - 1):
+        next_ind = h_mat_list[i+1].shape[3]
+        h_mult[:, :, current_ind : current_ind + next_ind] = alpha[:, :, i+1:i+2]
+        current_ind += next_ind
+    return h_mult
 
-      ax[0, 0].plot(t_arr, magn.detach().cpu(), label='tNN', c='C0')
-      ax[0, 0].plot(t_arr, ED_magn, label = 'ED', ls='--', c='C1')
-      ax2_1 = ax[0,0].twinx()
-      ax[0, 0].set_zorder(ax2_1.get_zorder() + 1)
-      ax[0, 0].patch.set_visible(False)
-      ax2_1.tick_params(axis='y', labelcolor='grey')
-      ax2_1.set_ylabel('Residuals', c='grey')
-      ax2_1.plot(t_arr, ED_magn - magn.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
-      ax[0,0].legend()
-      ax[1, 0].plot(t_arr, susc.detach().cpu(), label='tNN', c='C0')
-      ax[1, 0].plot(t_arr, ED_susc, label = 'ED', ls='--', c='C1')
-      ax2_1 = ax[1,0].twinx()
-      ax[1, 0].set_zorder(ax2_1.get_zorder() + 1)
-      ax[1, 0].patch.set_visible(False)
-      ax2_1.tick_params(axis='y', labelcolor='grey')
-      ax2_1.set_ylabel('Residuals', c='grey')
-      ax2_1.plot(t_arr, ED_susc - susc.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
-      ax[1,0].legend()
-      
-      y = np.arange(0,model.lattice_sites/2 + 1) + 0.5
-      X, Y = np.meshgrid(t_arr, y)
-      c1 = ax[2,0].pcolor(X, Y, corr[:, :-1].cpu(), label='tNN')
-      plt.colorbar(c1, cax=ax[2,1])
-      X, Y = np.meshgrid(t_arr, y)
-      c2 = ax[3,0].pcolor(X, Y, ED_corr[:, :-1], label='ED')
-      plt.colorbar(c2, cax=ax[3,1])
-      
-      ax[2,0].set_yticks(y[:-1] + 0.5)
-      ax[2,0].legend()
-      ax[3,0].set_yticks(y[:-1] + 0.5)
-      ax[3,0].legend()
-      ax[3,0].set_xlabel('ht')
-      ax[0,0].set_ylabel(r'$ \langle ' + magn_name + r' \rangle$', fontsize=13)
-      ax[1,0].set_ylabel(r'$ \frac{\partial \langle ' + magn_name + r' \rangle}{\partial h}$', fontsize=17)
-      ax[2,0].set_ylabel(r'd')
-      ax[3,0].set_ylabel(r'd')
-      
-      comm_ax = fig.add_subplot(313, frame_on=False)
-      comm_ax.tick_params(left=False,
-          bottom=False,
-          labelleft=False,
-          labelbottom=False)
-      comm_ax.set_ylabel(r'$\langle ' + corr_name + '_i \cdot ' + corr_name + r'_{i+d} \rangle $'+ '\n\n', fontsize=13)
-      
-      #fig.tight_layout()
-      fig.savefig(plot_folder + title + '.png')
-      plt.close(fig)
-      i+=1
-  tot_ax.legend()
-  tot_fig.savefig(plot_folder + tot_title + '.png')
-  model.to('cpu')
+def schrodinger_res_per_config(model, alpha, sampler, h_map, h_mat_list):
+    spins = sampler(model, alpha)
+    h_mult = calc_h_mult(model, alpha, h_mat_list)
+    #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
+    if (alpha.shape[1] == 1):
+        alpha = alpha.repeat(1, spins.shape[1], 1)
+    #gradient needed for dt_psi
+    alpha.requires_grad = True
+    
+    psi_s = model.call_forward(spins, alpha)
+    sp_h = get_sp(spins, h_map)
+    psi_sp_h = model.call_forward_sp(sp_h, alpha)
+    h_mat = torch.cat(h_mat_list, dim=3)
+    h_loc = calc_Oloc(psi_sp_h, h_mat, spins, h_mult)
+    dt_psi_s = calc_dt_psi(psi_s, alpha)
+    return dt_psi_s + 1j * h_loc
 
 def abs_sq(x):
   return x.real**2 + x.imag**2
+
+def primitive_fn(x, y):
+    print(x.shape, y.shape)
+    res = []
+    h = x
+    res.append(torch.zeros_like(y[0]))
+    for i in range(x.shape[0]-1):
+        h = (x[:i+1] - x[1:i+2]).reshape(-1,1,1)
+        print(h.shape, y[:i+1].shape)
+        res.append( torch.sum(h * y[:i+1], dim=0))
+    res = torch.stack(res, dim=0)
+    return res

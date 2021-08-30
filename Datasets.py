@@ -56,6 +56,23 @@ class Val_Data(Dataset):
     def __getitem__(self, index):
         return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 'ED_data': self.ED_data[index]}
 
+class Test_Data(Dataset):
+    def __init__(self, alpha, ED_magn, ED_susc, ED_corr):
+        self.len = alpha.shape[0]*alpha.shape[1] # #val sets * #t_val per set
+        self.num_t_val = alpha.shape[1]
+        self.alpha = alpha.flatten(0,1)
+        self.ED_magn = ED_magn.flatten(0,1)
+        self.ED_susc = ED_susc.flatten(0,1)
+        self.ED_corr = ED_corr.flatten(0,1)
+
+        
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 
+            'ED_magn': self.ED_magn[index], 'ED_susc': self.ED_susc[index], 'ED_corr': self.ED_corr[index]}
+
 
 
 if (__name__ == '__main__'):

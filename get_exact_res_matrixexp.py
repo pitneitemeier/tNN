@@ -83,7 +83,7 @@ def calc_res(H, h_param, magn_op, corr_op_list, psi_init, lattice_sites, t_min=0
   susc = torch.tensor(susc)
   magn = torch.tensor(magn)
   corr = [torch.tensor([torch.conj(psi.unsqueeze(0)) @ corr_op @ psi.unsqueeze(1) for psi in psi_t]) for corr_op in corr_op_list]
-  corr = torch.stack(corr)
+  corr = torch.stack(corr, dim=1)
   return t_arr.cpu().numpy(), torch.real(magn).cpu().numpy(), (susc).cpu().numpy(), torch.real(corr).cpu().numpy()
 
 

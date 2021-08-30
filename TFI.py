@@ -14,6 +14,7 @@ import utils
 import example_operators as ex_op
 import models
 import sampler
+from neptune.new.integrations.pytorch_lightning import NeptuneLogger
 #torch.set_default_dtype(torch.float32)
 
 def psi_init_z(spins):
@@ -33,7 +34,7 @@ def psi_init_x_forward(spins, lattice_sites):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 4
+    lattice_sites = 8
     
     h1 = []
     for l in range(lattice_sites):
@@ -59,10 +60,11 @@ if __name__=='__main__':
     print('validating on h= ', val_h_params)
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
     ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
-    ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
+    ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
+    #print(val_alpha.shape, ED_magn.shape, ED_corr.shape)
     h_param_range = [(0.15, 1.4)]
 
-    train_sampler = sampler.RandomSampler(lattice_sites, 80)
+    train_sampler = sampler.RandomSampler(lattice_sites, 32)
     #train_sampler = sampler.ExactSampler(lattice_sites)
     #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
     #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=500)
@@ -70,25 +72,35 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=4e5)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=2e4)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
+    test_cond = cond.ED_Test(magn_op, corr_list, h_list, lattice_sites, ED_magn, ED_susc, ED_corr, val_alpha, val_h_params, val_sampler)
 
-    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, 
-        batch_size=50, val_batch_size=50, num_workers=24)
+    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=test_cond,
+        batch_size=50, val_batch_size=50, test_batch_size=2, num_workers=24)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
         tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3)
+    #model = models.ParametrizedFeedForward.load_from_checkpoint(f'TFI{lattice_sites}x_FF_1.ckpt')
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
+    
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=1,
+    neptune_logger = NeptuneLogger(
+            api_key='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjMjAxNDViMi1mOWFjLTRlODEtYmZiZi02MDA4ZDIyMTYxODEifQ==',
+            project='pitneitemeier/tNN', 
+            name='test-run'
+        )
+
+    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=2,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback],
-        deterministic=False,
+        deterministic=False, logger=neptune_logger,
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     #trainer.tune(model, env)
     trainer.fit(model, env)
-    trainer.save_checkpoint(f'TFI{lattice_sites}x_FF_1.ckpt')
+    #trainer.save_checkpoint(f'TFI{lattice_sites}x_FF_1.ckpt')
+    #trainer.test(model=model, datamodule=env)
