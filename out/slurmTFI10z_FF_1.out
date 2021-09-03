@@ -1,0 +1,34 @@
++(0):ERROR:0: Unable to locate a modulefile for 'python/3.9.1'
+(OK) Loading cuda 11.2.0
+(!!) We are changing the naming scheme for the CUDA module. cuda/112 will become cuda/11.2 etc. The old version names will soon be deprecated, please update your scripts to avoid problems in the future.
+Traceback (most recent call last):
+  File "modelrunner_z.py", line 1, in <module>
+    import pytorch_lightning as pl
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/__init__.py", line 21, in <module>
+    from pytorch_lightning.callbacks import Callback  # noqa: E402
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/callbacks/__init__.py", line 26, in <module>
+    from pytorch_lightning.callbacks.stochastic_weight_avg import StochasticWeightAveraging
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/callbacks/stochastic_weight_avg.py", line 26, in <module>
+    from pytorch_lightning.trainer.optimizers import _get_default_scheduler_config
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/trainer/__init__.py", line 18, in <module>
+    from pytorch_lightning.trainer.trainer import Trainer
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/trainer/trainer.py", line 32, in <module>
+    from pytorch_lightning.loggers import LightningLoggerBase
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/loggers/__init__.py", line 29, in <module>
+    from pytorch_lightning.loggers.neptune import _NEPTUNE_AVAILABLE, NeptuneLogger  # noqa: F401
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pytorch_lightning/loggers/neptune.py", line 32, in <module>
+    import neptune
+  File "/home/nf020349/.local/lib/python3.6/site-packages/neptune/__init__.py", line 27, in <module>
+    from neptune.internal.api_clients import backend_factory
+  File "/home/nf020349/.local/lib/python3.6/site-packages/neptune/internal/api_clients/__init__.py", line 17, in <module>
+    from neptune.internal.api_clients.hosted_api_clients.hosted_backend_api_client import HostedNeptuneBackendApiClient
+  File "/home/nf020349/.local/lib/python3.6/site-packages/neptune/internal/api_clients/hosted_api_clients/hosted_backend_api_client.py", line 40, in <module>
+    from neptune.internal.api_clients.hosted_api_clients.hosted_alpha_leaderboard_api_client import \
+  File "/home/nf020349/.local/lib/python3.6/site-packages/neptune/internal/api_clients/hosted_api_clients/hosted_alpha_leaderboard_api_client.py", line 37, in <module>
+    from neptune.experiments import Experiment
+  File "/home/nf020349/.local/lib/python3.6/site-packages/neptune/experiments.py", line 20, in <module>
+    import pandas as pd
+  File "/home/nf020349/.local/lib/python3.6/site-packages/pandas/__init__.py", line 17, in <module>
+    "Unable to import required dependencies:\n" + "\n".join(missing_dependencies)
+ImportError: Unable to import required dependencies:
+pytz: No module named 'pytz'

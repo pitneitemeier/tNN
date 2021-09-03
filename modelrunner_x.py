@@ -29,11 +29,12 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-
+init_dict = {'x': psi_init_x_forward, 'z':psi_init_z_forward}
 
 if __name__=='__main__':
     ### setting up hamiltonian
     lattice_sites = 10
+    init_polarization = 'x'
     
     h1 = []
     for l in range(lattice_sites):
@@ -49,7 +50,7 @@ if __name__=='__main__':
     corr_list = [ex_op.avg_correlation(op.Sz, d+1, lattice_sites) for d in range(int(lattice_sites/2))]
 
     ### loading ED Data for Validation
-    folder = f'ED_data/TFI{lattice_sites}x/'
+    folder = f'ED_data/TFI{lattice_sites}{init_polarization}/'
     append = '_0.2_1.3.csv'
     val_h_params = np.loadtxt(folder + 'h_params' + append, delimiter=',')
     val_t_arr = np.loadtxt(folder + 't_arr' + append, delimiter=',')
@@ -75,13 +76,13 @@ if __name__=='__main__':
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, 
         batch_size=100, val_batch_size=50, num_workers=24)
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=psi_init_x_forward,
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=init_dict[init_polarization],
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
         tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, init_decay=1, step_size=5, gamma=0.1)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI{init_polarization}_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
     trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=10,
@@ -90,4 +91,4 @@ if __name__=='__main__':
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     #trainer.tune(model, env)
     trainer.fit(model, env)
-    trainer.save_checkpoint(f'TFI{lattice_sites}x_FF_1.ckpt')
+    trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_1.ckpt')

@@ -75,7 +75,7 @@ class schrodinger_eq_per_config(Condition):
         self.update_h_mult(alpha)
         h_loc = utils.calc_Oloc(psi_sp_h, self.h_mat, spins, self.h_mult)
         dt_psi_s = utils.calc_dt_psi(psi_s, alpha)
-        schroedinger_per_config = utils.abs_sq(dt_psi_s + 1j * h_loc)
+        schroedinger_per_config = torch.exp(-alpha[:,:,:1]) * utils.abs_sq(dt_psi_s + 1j * h_loc)
         schroedinger_loss = torch.mean(schroedinger_per_config)
         return self.weight * schroedinger_loss
 
