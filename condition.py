@@ -27,7 +27,7 @@ class Condition(ABC):
 
         
 class schrodinger_eq_per_config(Condition):
-    def __init__(self, h_list, lattice_sites, sampler, t_range, h_param_range, epoch_len, name, weight = 1):
+    def __init__(self, h_list, lattice_sites, sampler, t_range, h_param_range, epoch_len, name, weight = 1, exp_decay = False):
         super().__init__()
         self.weight = weight
         h_tot = sum(h_list, [])
@@ -39,6 +39,7 @@ class schrodinger_eq_per_config(Condition):
         self.epoch_len = epoch_len
         self.sampler = sampler
         self.lattice_sites = lattice_sites
+        self.exp_decay = exp_decay
 
 
     def to(self, device):
@@ -55,11 +56,15 @@ class schrodinger_eq_per_config(Condition):
             self.to(model.device)
         alpha = data_dict['alpha']
         schrodinger_res_per_config = utils.schrodinger_res_per_config(model, alpha, self.sampler, self.h_map, self.h_mat_list)
-        schrodinger_loss = torch.mean( utils.abs_sq(schrodinger_res_per_config) )
+        if not self.exp_decay:
+            schrodinger_loss = torch.mean( utils.abs_sq(schrodinger_res_per_config) )
+        else:
+            schrodinger_loss = torch.mean( torch.exp( -data_dict['alpha'][:,0]) * utils.abs_sq(schrodinger_res_per_config) )
+        
         return self.weight * schrodinger_loss
 
     def get_dataset(self):
-        return Datasets.Train_Data(self.t_range, self.h_param_range, self.epoch_len)
+        return Datasets.Train_Data(t_range=self.t_range, h_param_range=self.h_param_range, epoch_len=self.epoch_len)
 
 
 class ED_Validation(Condition):
@@ -132,10 +137,14 @@ class ED_Validation(Condition):
         plt.close(fig)
 
 class ED_Test(Condition):
-    def __init__(self, magn_op, corr_op_list, h_list, lattice_sites, ED_magn, ED_susc, ED_corr, alpha, val_names, sampler):
+    def __init__(self, magn_op, corr_op_list, h_list, lattice_sites, ED_magn, ED_susc, ED_corr, alpha, val_names, sampler, name, plot_folder=''):
         super().__init__()
         self.sampler = sampler
         self.MC_sampling = sampler.is_MC
+        self.magn_name = magn_op[0][0].name
+        self.corr_name = corr_op_list[0][0][0].name
+        self.name = name
+        self.plot_folder = plot_folder
         self.ED_magn = torch.from_numpy(ED_magn).type(torch.get_default_dtype())
         self.ED_susc = torch.from_numpy(ED_susc).type(torch.get_default_dtype())
         self.ED_corr = torch.from_numpy(ED_corr).type(torch.get_default_dtype())
@@ -226,11 +235,9 @@ class ED_Test(Condition):
         tot_fig, tot_ax = plt.subplots(figsize=(10,6))
         tot_ax.set_xlabel('ht')
         
-        #TODO make names auto infer
-        magn_name = 'S^x'
-        corr_name = 'S^z'
-        name='TFI'
-        plot_folder = ''
+        magn_name = self.magn_name
+        corr_name = self.corr_name
+        name= self.name
 
         tot_ax.set_ylabel(r'$ \langle '+ magn_name +r' \rangle$', fontsize=13)
         tot_title = f'{name}, {model.lattice_sites} Spins'
@@ -302,7 +309,7 @@ class ED_Test(Condition):
             comm_ax = fig.add_subplot(313, frame_on=False)
             comm_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
             comm_ax.set_ylabel(r'$\langle ' + corr_name + '_i \cdot ' + corr_name + r'_{i+d} \rangle $'+ '\n\n', fontsize=13)
-            fig.savefig(plot_folder + title + '.png')
+            fig.savefig(self.plot_folder + title + '.png')
             plt.close(fig)
             fig, ax = plt.subplots(2,1, sharex=True)
             ax[0].plot(t_arr, energy/energy[0]-1, label='relative energy')
@@ -311,11 +318,11 @@ class ED_Test(Condition):
             ax[1].set_xlabel('t')
             ax[0].set_ylabel('E')
             ax[1].set_ylabel(r'$ \langle \psi | \psi \rangle$')
-            fig.savefig(plot_folder + title + '_E_norm.png')
+            fig.savefig(self.plot_folder + title + '_E_norm.png')
 
         tot_ax.legend()
         #tot_fig.tight_layout()
-        tot_fig.savefig(plot_folder + tot_title + '.png')
+        tot_fig.savefig(self.plot_folder + tot_title + '.png')
         plt.close(fig)
 
 #old:

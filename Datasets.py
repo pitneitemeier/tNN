@@ -6,11 +6,12 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, t_range, h_param_range=None, epoch_len=100000):
+    def __init__(self, t_range, epoch_len, h_param_range=None):
         self.h_param_range = h_param_range
         self.t_range = t_range
         #just setting fixed epoch len to define the interval for validation and lr scheduling
-        self.epoch_len = int(epoch_len)
+        self.epoch_len = epoch_len
+
     def __len__(self):
         return self.epoch_len
 
@@ -24,11 +25,6 @@ class Train_Data(Dataset):
         -------
         alpha : tensor
             shape = (num_spin_configs, num_ext_params + time)
-        alpha_0 : tensor
-            same as alpha but with t=0 to satisfy init cond
-        ext_param_scale : tensor
-            tensor to scale matrix elements of hamiltonian according to external parameters
-            shape = (num_spin_configs, num_summands_h, 1)
         '''
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)‚
         if self.h_param_range is not None:
