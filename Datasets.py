@@ -6,11 +6,12 @@ import utils
 import Operator as op
 
 class Train_Data(Dataset):
-    def __init__(self, t_range, h_param_range=None, epoch_len=100000):
+    def __init__(self, t_range, epoch_len, h_param_range=None):
         self.h_param_range = h_param_range
         self.t_range = t_range
         #just setting fixed epoch len to define the interval for validation and lr scheduling
-        self.epoch_len = int(epoch_len)
+        self.epoch_len = epoch_len
+
     def __len__(self):
         return self.epoch_len
 
@@ -24,11 +25,6 @@ class Train_Data(Dataset):
         -------
         alpha : tensor
             shape = (num_spin_configs, num_ext_params + time)
-        alpha_0 : tensor
-            same as alpha but with t=0 to satisfy init cond
-        ext_param_scale : tensor
-            tensor to scale matrix elements of hamiltonian according to external parameters
-            shape = (num_spin_configs, num_summands_h, 1)
         '''
         #creating the random alpha array of numspins with one value of (t, h_ext1, ..)‚
         if self.h_param_range is not None:
@@ -55,6 +51,23 @@ class Val_Data(Dataset):
 
     def __getitem__(self, index):
         return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 'ED_data': self.ED_data[index]}
+
+class Test_Data(Dataset):
+    def __init__(self, alpha, ED_magn, ED_susc, ED_corr):
+        self.len = alpha.shape[0]*alpha.shape[1] # #val sets * #t_val per set
+        self.num_t_val = alpha.shape[1]
+        self.alpha = alpha.flatten(0,1)
+        self.ED_magn = ED_magn.flatten(0,1)
+        self.ED_susc = ED_susc.flatten(0,1)
+        self.ED_corr = ED_corr.flatten(0,1)
+
+        
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 
+            'ED_magn': self.ED_magn[index], 'ED_susc': self.ED_susc[index], 'ED_corr': self.ED_corr[index]}
 
 
 

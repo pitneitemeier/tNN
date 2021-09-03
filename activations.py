@@ -47,8 +47,8 @@ class rad_phase_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
-    x = x.reshape(x.shape[0], int(x.shape[1] / 2), 2)
-    return x[:, :, 0] * torch.exp(1j*x[:, :, 1])
+    half = int(x.shape[1] / 2)
+    return x[:, :half] * torch.exp(1j*x[:, half:])
 
 class rad_phase_conv_act(nn.Module):
   def __init__(self):
@@ -56,16 +56,21 @@ class rad_phase_conv_act(nn.Module):
   def forward(self, x):
     #assumes x of shape (N, C, L) with C%2=0
     half = int(x.shape[1]/2)
-    ret = x[:, :half, :] * torch.exp(1j*x[:, half:, :])
-    #print('rad_phase shape', ret.shape)
-    return ret
+    return x[:, :half, :] * torch.exp(1j*x[:, half:, :])
 
 
 class euler_act(nn.Module):
   def __init__(self):
     super().__init__()
   def forward(self, x):
-    return torch.exp(1j*x)
+    return torch.exp(2*3.1415926535j*x)
+
+class ab_act(nn.Module):
+  def __init__(self):
+    super().__init__()
+  def forward(self, x):
+    half = int(x.shape[1] / 2)
+    return x[:, :half] + 1j*x[:, half:]
 
 
 
@@ -321,14 +326,49 @@ class combination_block(nn.Module):
   def forward(self, input1, input2):
     return self.act_fun( self.linear( self.rad_phase( input1 * input2 )))
 
-class DumbCombinationBlock(nn.Module):
+class FourierCombinationBlock(nn.Module):
   def __init__(self, mult_size, out_size, act_fun):
     super().__init__()
     self.linear = ComplexLinear( mult_size, out_size)
     self.act_fun = act_fun()
+    self.rad_phase = euler_act()
+  def forward(self, input1, input2):
+    return self.act_fun( self.linear( self.rad_phase( input1 * input2 )))
+
+class MultCombinationBlock(nn.Module):
+  def __init__(self, mult_size, out_size, act_fun):
+    super().__init__()
+    self.linear = ComplexLinear( mult_size, out_size)
+    self.act_fun = act_fun()
+  def forward(self, input1, input2):
+    return self.act_fun( self.linear( input1 * input2 ))
+
+class abCombinationBlock(nn.Module):
+  def __init__(self, mult_size, out_size, act_fun):
+    super().__init__()
+    self.linear = ComplexLinear( int(mult_size / 2), out_size)
+    self.act_fun = act_fun()
+    self.rad_phase = ab_act()
+  def forward(self, input1, input2):
+    return self.act_fun( self.linear( self.rad_phase( input1 * input2 )))
+
+class CatCombinationBlock(nn.Module):
+  def __init__(self, mult_size, out_size, act_fun):
+    super().__init__()
+    self.linear = ComplexLinear( mult_size, out_size)
+    self.act_fun = act_fun()
+    self.rad_phase = rad_phase_act()
+  def forward(self, input1, input2):
+    return self.act_fun( self.linear( self.rad_phase( torch.cat((input1, input2), dim=1))))
+
+class DumbCatCombinationBlock(nn.Module):
+  def __init__(self, mult_size, out_size, act_fun):
+    super().__init__()
+    self.linear = ComplexLinear( 2*mult_size, out_size)
+    self.act_fun = act_fun()
     self.to_complex = to_complex()
   def forward(self, input1, input2):
-    return self.act_fun( self.linear( self.to_complex( input1 * input2 )))
+    return self.act_fun( self.linear( self.to_complex( torch.cat((input1, input2), dim=1))))
 
 class LinearBlock(nn.Module):
   def __init__(self, hidden_size, act_fun=None):
@@ -345,6 +385,20 @@ class LinearBlock(nn.Module):
     out = self.ff_linear2( self.act_fun( self.ff_linear1( out ))) + input
     return out
 
+class SimpleLinearBlock(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.ff_linear1 = nn.Linear(hidden_size, hidden_size)
+      self.ff_linear2 = nn.Linear(hidden_size, hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.act_fun( input )
+    out = self.ff_linear2( self.act_fun( self.ff_linear1( out )))
+    return out
+
 class ComplexLinearBlock(nn.Module):
   def __init__(self, hidden_size, act_fun=None):
       super().__init__()
@@ -357,6 +411,33 @@ class ComplexLinearBlock(nn.Module):
   def forward(self, input):
     out = self.ff_linear2( self.act_fun( self.ff_linear1( self.act_fun( input )) )) + input
     return out
+
+class NormComplexLinearBlock(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.ff_linear1 = ComplexLinear(hidden_size, hidden_size)
+      self.ff_linear2 = ComplexLinear(hidden_size, hidden_size)
+      self.norm = ComplexLayerNorm(hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.act_fun( self.norm(input) )
+    return self.ff_linear2( self.act_fun( self.ff_linear1( out ))) + input
+
+class SimpleComplexLinearBlock(nn.Module):
+  def __init__(self, hidden_size, act_fun=None):
+      super().__init__()
+      self.ff_linear1 = ComplexLinear(hidden_size, hidden_size)
+      self.ff_linear2 = ComplexLinear(hidden_size, hidden_size)
+      if act_fun is not None:
+        self.act_fun=act_fun()
+      else:
+        self.act_fun = Identity
+  def forward(self, input):
+    out = self.ff_linear2( self.act_fun( self.ff_linear1( self.act_fun( input )) ))
+    return out 
 
 class FeedForward(nn.Module):
   def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
@@ -376,10 +457,83 @@ class FeedForward(nn.Module):
       out = layer(out)
     return self.last_layer(out)
 
+class SimpleFeedForward(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([SimpleLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = nn.Linear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = nn.Linear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        nn.Linear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
 class ComplexFeedForward(nn.Module):
   def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
     super().__init__()
     self.hidden_layers = nn.ModuleList([ComplexLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = ComplexLinear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = ComplexLinear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        ComplexLinear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
+class tNN(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([ComplexLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = nn.Linear(in_features=input_size, out_features=2*hidden_size)
+    self.rad_phase_act = rad_phase_act()
+    if last_act is None:
+      self.last_layer = ComplexLinear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        ComplexLinear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.rad_phase_act(self.first_layer(input))
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
+class NormComplexFeedForward(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([NormComplexLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
+    self.first_layer = ComplexLinear(in_features=input_size, out_features=hidden_size)
+    if last_act is None:
+      self.last_layer = ComplexLinear(hidden_size, output_size)
+    else:
+      self.last_layer = nn.Sequential(
+        ComplexLinear(hidden_size, output_size),
+        last_act()
+      )
+  def forward(self, input):
+    out = self.first_layer(input)
+    for layer in self.hidden_layers:
+      out = layer(out)
+    return self.last_layer(out)
+
+class SimpleComplexFeedForward(nn.Module):
+  def __init__(self, input_size, output_size, hidden_size, num_hidden_layers, act_fun, last_act=None):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList([SimpleComplexLinearBlock(hidden_size=hidden_size, act_fun=act_fun) for _ in range(num_hidden_layers)])
     self.first_layer = ComplexLinear(in_features=input_size, out_features=hidden_size)
     if last_act is None:
       self.last_layer = ComplexLinear(hidden_size, output_size)
@@ -433,7 +587,7 @@ class ResLatticeBlock(nn.Module):
     self.conv_first = nn.Sequential(
       nn.Conv1d(1, num_features, kernel_size=kernel_size, padding=padding, padding_mode=padding_mode),
     )
-    self.conv_layers = nn.ModuleList([ResConv1d(num_features, num_features, kernel_size, act_fun, padding='same') for _ in range(num_conv_layers - 1)])
+    self.conv_layers = nn.ModuleList([ResConv1d(num_features, num_features, kernel_size, act_fun, padding='same', padding_mode='circular') for _ in range(num_conv_layers - 1)])
     self.last_linear = nn.Sequential(
       act_fun(),
       nn.Linear(conv_out_size * num_features, out_size)
@@ -445,3 +599,17 @@ class ResLatticeBlock(nn.Module):
       conv_out = layer(conv_out)
     out = self.last_linear( self.flatten_conv(conv_out) )
     return out
+
+
+class ComplexLayerNorm(nn.Module):
+  def __init__(self, input_size):
+      super().__init__()
+      self.a = torch.nn.Parameter(torch.zeros(input_size))
+      self.b = torch.nn.Parameter(torch.zeros(input_size))
+      self.w = torch.nn.Parameter(torch.ones(input_size))
+      self.input_size = input_size
+  #@torch.jit.script
+  def forward(self, x):
+    mean = torch.sum(x, dim=1, keepdim=True) / self.input_size
+    std = torch.sqrt(torch.sum(torch.abs(x-mean)**2, dim=1, keepdim=True) / (self.input_size - 1))
+    return self.w*(x-mean)/std + self.a + 1j*self.b
