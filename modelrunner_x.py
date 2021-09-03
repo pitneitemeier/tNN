@@ -64,7 +64,7 @@ if __name__=='__main__':
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
     h_param_range = [(0.15, 1.4)]
 
-    tot_samples_epoch = 1e7
+    tot_samples_epoch = 2e7
     samples_per_alpha = 1
     tot_batch_size = 4000
     batch_size = int(tot_batch_size/samples_per_alpha)
@@ -103,12 +103,12 @@ if __name__=='__main__':
         )
     neptune_logger.log_hyperparams(h_param_dict)
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=1,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=15,
         auto_select_gpus=True, gradient_clip_val=.5,
         callbacks=[lr_monitor, checkpoint_callback], auto_lr_find=True,
         deterministic=False, logger=neptune_logger,
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     #trainer.tune(model, env)
     trainer.fit(model, env)
-    #trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_2.ckpt')
-    #trainer.test(model=model, datamodule=env)
+    trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_1.ckpt')
+    trainer.test(model=model, datamodule=env)

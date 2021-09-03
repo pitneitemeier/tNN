@@ -7,7 +7,7 @@ test.py
 
 #lightning logs
 lightning_logs/
-./neptune/
+.neptune/
 
 #checkpoint files
 *.ckpt

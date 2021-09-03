@@ -64,7 +64,7 @@ class ParametrizedFeedForward(tNN.Wave_Fun):
         t_out = self.tNN(alpha)
         comb = self.combination_block(lat_out, t_out)
         psi_out = self.psi(comb)
-        return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + self.psi_init(spins, self.lattice_sites)
+        return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + torch.exp(- self.init_decay * alpha[:, :1]) * self.psi_init(spins, self.lattice_sites)
 
     def configure_optimizers(self):
         optimizer = self.opt(self.parameters(), lr=self.lr)

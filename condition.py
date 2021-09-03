@@ -313,7 +313,6 @@ class ED_Test(Condition):
             plt.close(fig)
             fig, ax = plt.subplots(2,1, sharex=True)
             ax[0].plot(t_arr, energy/energy[0]-1, label='relative energy')
-            print(norm)
             ax[1].plot(t_arr, norm/norm[0]-1, label='relative norm')
             ax[1].set_xlabel('t')
             ax[0].set_ylabel('E')
@@ -327,7 +326,6 @@ class ED_Test(Condition):
 
 #old:
 '''
-
 class schrodinger_eq(Condition):
     def __init__(self, h_list, lattice_sites, name, weight = 1):
         super().__init__(weight)

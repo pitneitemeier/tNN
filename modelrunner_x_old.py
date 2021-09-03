@@ -14,7 +14,6 @@ import utils
 import example_operators as ex_op
 import models
 import sampler
-from neptune.new.integrations.pytorch_lightning import NeptuneLogger
 #torch.set_default_dtype(torch.float32)
 
 def psi_init_z(spins):
@@ -30,7 +29,7 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-
+init_dict = {'x': psi_init_x_forward, 'z':psi_init_z_forward}
 
 if __name__=='__main__':
     ### setting up hamiltonian
@@ -61,54 +60,35 @@ if __name__=='__main__':
     print('validating on h= ', val_h_params)
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
     ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
-    ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
+    ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], int(lattice_sites/2), ED_magn.shape[1])
     h_param_range = [(0.15, 1.4)]
 
-    tot_samples_epoch = 1e7
-    samples_per_alpha = 1
-    tot_batch_size = 4000
-    batch_size = int(tot_batch_size/samples_per_alpha)
-    epoch_len = int(tot_samples_epoch/samples_per_alpha)
-    steps = int(epoch_len/batch_size)
-
-    h_param_dict = {'tot_samples':tot_samples_epoch, 'tot_batch':tot_batch_size, 'samples_per_alpha':samples_per_alpha}
-    train_sampler = sampler.RandomSampler(lattice_sites, samples_per_alpha)
+    train_sampler = sampler.RandomSampler(lattice_sites, 32)
+    #train_sampler = sampler.ExactSampler(lattice_sites)
     #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
     #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=500)
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=epoch_len, exp_decay=False)
+    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=2e6)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
-    test_cond = cond.ED_Test(magn_op, corr_list, h_list, lattice_sites, ED_magn, ED_susc, ED_corr, val_alpha, val_h_params, val_sampler, 
-    name=f'TFI{init_polarization}', plot_folder=f'results/TFI{lattice_sites}{init_polarization}/')
 
-    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=test_cond,
-        batch_size=batch_size, val_batch_size=50, test_batch_size=2, num_workers=24)
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, 
+        batch_size=100, val_batch_size=50, num_workers=24)
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=init_dict[init_polarization],
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
-        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, step_size=5, gamma=0.1)
+        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, init_decay=1, step_size=5, gamma=0.1)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI{init_polarization}_{lattice_sites}_'+model.name+'-{epoch:02d}-{val_loss:.2f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    
-    neptune_logger = NeptuneLogger(
-            api_key='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjMjAxNDViMi1mOWFjLTRlODEtYmZiZi02MDA4ZDIyMTYxODEifQ==',
-            project='pitneitemeier/tNN', 
-            name=f'TFI{init_polarization}',
-            close_after_fit=False
-        )
-    neptune_logger.log_hyperparams(h_param_dict)
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=1,
-        auto_select_gpus=True, gradient_clip_val=.5,
-        callbacks=[lr_monitor, checkpoint_callback], auto_lr_find=True,
-        deterministic=False, logger=neptune_logger,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=-1, max_epochs=10,
+        callbacks=[lr_monitor, checkpoint_callback], gradient_clip_val=1.,
+        deterministic=False,
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     #trainer.tune(model, env)
     trainer.fit(model, env)
-    #trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_2.ckpt')
-    #trainer.test(model=model, datamodule=env)
+    trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_1.ckpt')
