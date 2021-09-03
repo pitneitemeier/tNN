@@ -8,7 +8,9 @@
 #SBATCH --time=0-7:00:00
 #SBATCH --output=out/slurmTFI10z_FF_1.out
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
+#SBATCH --mail-type=ALL
 
-module load python/3.9.1
-module load cuda/11.2
-python3 modelrunner_z.py
+
+module load python
+module load cuda/11.4
+python3 model_runner.py

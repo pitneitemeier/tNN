@@ -1,4 +1,5 @@
 from typing import Optional
+from numpy.lib.shape_base import expand_dims
 import pytorch_lightning as pl
 from pytorch_lightning import LightningDataModule, LightningModule
 from torch.utils.data import DataLoader
@@ -8,25 +9,36 @@ import Datasets
 import matplotlib.pyplot as plt
 from collections import Sequence
 import sampler
+import collections
 
 class Environment(LightningDataModule):
-    def __init__(self, train_condition, val_condition, batch_size, val_batch_size, num_workers=0):
+    def __init__(self, train_condition, val_condition, batch_size, val_batch_size, test_batch_size=None, num_workers=0, test_condition=None):
         super().__init__()
         self.train_condition = train_condition
         self.val_condition = val_condition
+        self.test_condition = test_condition
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size
+        self.test_batch_size = test_batch_size
         self.num_workers = num_workers
 
     def setup(self, stage: Optional[str] = None):
         self.train_data = self.train_condition.get_dataset()
         self.val_data = self.val_condition.get_dataset()
+        if self.test_condition is not None:
+            self.test_data = self.test_condition.get_dataset()
 
     def train_dataloader(self):
         return DataLoader(self.train_data, self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
         return DataLoader(self.val_data, self.val_batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        if self.test_condition is not None:
+            return DataLoader(self.test_data, self.test_batch_size, num_workers=self.num_workers)
+        else:
+            return None
 
 class Wave_Fun(LightningModule):
     def __init__(self, lattice_sites, name):
@@ -36,7 +48,7 @@ class Wave_Fun(LightningModule):
 
     def call_forward(self, spins, alpha):
         '''
-        makes forward callable with (num_alpha_configs, num_spin_configs)
+        makes forward callable with two batch dimensions (num_alpha_configs, num_spin_configs)
         Parameters
         ----------
         spins: tensor, dtype=float
@@ -64,7 +76,7 @@ class Wave_Fun(LightningModule):
 
     def call_forward_sp(self, sprimes, alpha):
         '''
-        makes forward callable with (num_alpha_configs, num_spin_configs, num_sprimes)
+        makes forward callable with three batch dimensions for the calculations of psi_s' (num_alpha_configs, num_spin_configs, num_sprimes)
         Parameters
         ----------
         sprimes: tensor, dtype=float
@@ -103,9 +115,9 @@ class Wave_Fun(LightningModule):
         return res_dict
     
     def validation_epoch_end(self, outs):
-        #TODO make this less ugly
+        #creating a dict with the results of all batches for one accelerator. 
+        #first creating a list of tensors with all batches and then concatenating this list into one tensor
         res_dict = {key: [] for key in outs[0].keys()}
-        #put all batches in a list in one dict
         for i, out in enumerate(outs):
             for key in out:
                 res_dict[key].append(out[key])
@@ -113,6 +125,7 @@ class Wave_Fun(LightningModule):
         for key in res_dict:
             res_dict[key] = torch.cat(res_dict[key])
         
+        #gathering the tensors from all accelerators
         res_dict = self.all_gather(res_dict)
         #with multi gpu training need to flatten batch axis from multiple gpus after gathering
         if len(res_dict['val_set_idx'].shape)==2:
@@ -121,35 +134,66 @@ class Wave_Fun(LightningModule):
         
         self.trainer.datamodule.val_condition.plot_results(self, res_dict)
 
+    def test_step(self, data_dict, index):
+        torch.set_grad_enabled(True)
+        loss, res_dict = self.trainer.datamodule.test_condition(self, data_dict)
+        self.log('test_loss', loss, prog_bar=True)
+        return res_dict
+    
+    def test_epoch_end(self, outs):
+        #creating a dict with the results of all batches for one accelerator. 
+        #first creating a list of tensors with all batches and then concatenating this list into one tensor
+        res_dict = {key: [] for key in outs[0].keys()}
+        for i, out in enumerate(outs):
+            for key in out:
+                res_dict[key].append(out[key])
+        #concatenate the list of batch tensors into one
+        for key in res_dict:
+            res_dict[key] = torch.cat(res_dict[key])
         
-    def measure_observable(self, alpha, spins, obs):
-        alpha = alpha.to(self.device)
-        spins = spins.to(self.device)
-        obs_map = utils.get_map(obs, self.lattice_sites)
-        obs_mat = utils.get_total_mat_els(obs, self.lattice_sites)
-        obs_map = obs_map.to(self.device)
-        obs_mat = obs_mat.to(self.device)
-        sp_o = utils.get_sp(spins, obs_map)
-        psi_s = self.call_forward(spins, alpha)
-        psi_sp_o = self.call_forward_sp(sp_o, alpha)
-        o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins)
-        psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
-        psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-        observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
-        return torch.real(observable)
+        #gathering the tensors from all accelerators
+        res_dict = self.all_gather(res_dict)
+        #with multi gpu training need to flatten batch axis from multiple gpus after gathering
+        if len(res_dict['val_set_idx'].shape)==2:
+            for key in res_dict:
+                res_dict[key] = res_dict[key].flatten(0,1)
+        
+        self.trainer.datamodule.test_condition.plot_results(self, res_dict)
+
 
     def measure_observable_compiled(self, alpha, sampler, obs_mat, obs_map):
+        '''
+        allows the measurement of observables of type Operator that have been compiled to mat_els and a map using utils.get_total_mat_els and utils.get_map
+        Parameters
+        ----------
+        alpha: tensor, dtype=float
+            inputs to the wave function (time, ext_param)
+            shape = (num_alpha_configs, 1, num_inputs)
+        sampler : samplers.BaseSampler 
+            sampler to get spin configs for alpha values. Can be exact (all spin configs) or any type of MC sampler. 
+            Calculation of expectation values is automatically adjusted according to sampler.is_MC
+        returns
+        -------
+        observable : tensor
+            the observable
+            shape = (num_alpha_configs)
+        '''
+        ext_param_scale = None
+        if isinstance(obs_mat, list):
+            #assume if it is list then it has to be scaled with external params of alpha
+            ext_param_scale = utils.calc_h_mult(self, alpha, obs_mat)
+            obs_mat = torch.cat(obs_mat, dim=3)
         spins = sampler(self, alpha)
         sp_o = utils.get_sp(spins, obs_map)
         psi_s = self.call_forward(spins, alpha)
         psi_sp_o = self.call_forward_sp(sp_o, alpha)
         if not sampler.is_MC:
-            o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins)
+            o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins, ext_param_scale=ext_param_scale)
             psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
             psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
             observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
         else:
-            o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, obs_mat, spins)
+            o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, obs_mat, spins, ext_param_scale=ext_param_scale)
             num_samples = o_loc.shape[1]
             observable = o_loc.sum(1)/num_samples
         return torch.real(observable) 
