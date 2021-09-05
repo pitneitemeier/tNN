@@ -86,7 +86,7 @@ if __name__=='__main__':
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=test_cond,
         batch_size=batch_size, val_batch_size=50, test_batch_size=2, num_workers=24)
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-4, psi_init=psi_init_z_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
         tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, step_size=5, gamma=0.1)
 

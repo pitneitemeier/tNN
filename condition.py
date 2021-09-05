@@ -271,7 +271,7 @@ class ED_Test(Condition):
             ax2_1.tick_params(axis='y', labelcolor='grey')
             ax2_1.set_ylabel('Residuals', c='grey')
             ax2_1.plot(t_arr, torch.abs(ED_magn - magn), label='Residuals', c='grey', ls='dotted')
-            #ax2_1.plot(t_arr, h_res_int, label='integrated pred error', c='grey', ls='dashed')
+            ax2_1.plot(t_arr, h_res_int, label='integrated pred error', c='grey', ls='dashed')
             ax[0].legend()
             ax[1].plot(t_arr, susc.detach().cpu(), label='tNN', c='C0')
             ax[1].plot(t_arr, ED_susc, label = 'ED', ls='--', c='C1')
@@ -281,7 +281,7 @@ class ED_Test(Condition):
             ax2_1.tick_params(axis='y', labelcolor='grey')
             ax2_1.set_ylabel('Residuals', c='grey')
             ax2_1.plot(t_arr, ED_susc - susc.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
-            #ax2_1.plot(t_arr, torch.mean(torch.abs(h_res), dim=1), label='tNN res', c='grey', ls='dashed')
+            ax2_1.plot(t_arr, torch.mean(torch.abs(h_res), dim=1), label='tNN res', c='grey', ls='dashed')
             ax[1].legend()
             
             y = np.arange(0,model.lattice_sites/2 + 1) + 0.5

@@ -9,8 +9,8 @@ import torch
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 2**(- lattice_sites / 2))
 
-lattice_sites = 4
-    
+lattice_sites = 10
+
 h1 = []
 for l in range(lattice_sites):
     h1 += op.Sz(l) * (op.Sz((l+1) % lattice_sites))
