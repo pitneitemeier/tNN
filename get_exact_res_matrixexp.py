@@ -52,6 +52,17 @@ def get_hamiltonian_TFI(h_param, lattice_sites):
     H += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+1) % n, n) + h_param * sigma_i(sig_x, i, n))
   return H, h_param
 
+def get_hamiltonian_XXZ(h_param, lattice_sites):
+  #TODO
+  n = lattice_sites
+
+  h_param = torch.full((1,), h_param, requires_grad=True, device=device)
+  size = np.power(2,n)
+  H = torch.zeros((size, size), dtype=torch.complex128, device=device)
+  for i in range(n):
+    H += (sigma_i(sig_z, i, n) @ sigma_i(sig_z, (i+1) % n, n) + h_param * sigma_i(sig_x, i, n))
+  return H, h_param
+
 def get_mean_magn_op(lattice_sites, base_op):
   n = lattice_sites
   size = np.power(2,n)
@@ -74,6 +85,16 @@ def get_init_state_kron(psi_init, lattice_sites):
     psi_init = torch.kron( temp, psi_init)
   return psi_init
 
+def get_init_state_half(lattice_sites):
+  x_up = 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) )
+  x_down = 1 / np.sqrt(2) * ( e_i(0,2) - e_i(1,2) )
+  psi_init = x_down
+  #for i in range(int(lattice_sites/2)-1):
+  #  psi_init = torch.kron( x_up, psi_init)
+  for i in range(int(lattice_sites)-1):
+    psi_init = torch.kron( x_up, psi_init)
+  return psi_init
+
 def calc_res(H, h_param, magn_op, corr_op_list, psi_init, lattice_sites, t_min=0, t_max=1):
   t_arr = torch.linspace(t_min,t_max,100, device=device)
   psi_t = [torch.matrix_exp(-1j*t*H) @ psi_init for t in t_arr]
@@ -89,21 +110,26 @@ def calc_res(H, h_param, magn_op, corr_op_list, psi_init, lattice_sites, t_min=0
 
 import matplotlib.pyplot as plt
 
-def plot_res(t_arr, magn, susc):
+def plot_res(t_arr, h_arr, magn_list):
   fig, ax = plt.subplots(figsize=(10,10))
-  ax.plot(t_arr, magn, label = 'magnetization', c='C0')
-  ax.plot(t_arr, susc*0, label = 'susceptibility', c='C1')
+  i=0
+  for h, magn in zip(h_arr, magn_list):
+    ax.plot(t_arr, magn, label = f'{h:.1f}', c=f'C{i}')
+    i+=1
   ax.legend()
   #ax.plot(data[:, 0], data[:, 1], c="red", label=r"Transverse magnetization $\langle X\rangle$", ls='--')
   fig.savefig('ED_res.png')
 
 device='cuda'
 lattice_sites = 10
-res_folder = f'ED_data/TFI{lattice_sites}z/'
-#psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
-psi_init = e_i(0,2)
-psi_init = get_init_state_kron(psi_init, lattice_sites)
+res_folder = f'ED_data/TFI{lattice_sites}pert/'
+#psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) - e_i(1,2) ))
+#psi_init = e_i(0,2)
+#psi_init = get_init_state_kron(psi_init, lattice_sites)
+psi_init = get_init_state_half(lattice_sites)
 magn_op = get_mean_magn_op(lattice_sites, sig_x)
+z_magn_op = get_mean_magn_op(lattice_sites, sig_z)
+magn_op_single = sigma_i(sig_x, 0, lattice_sites)
 corr_op_list = [get_mean_corr_op(lattice_sites, sig_z, d + 1) for d in range(int(lattice_sites/2))]
 h_param_list = [0.2, 0.4, 0.6, 0.8, 1., 1.3]
 #h_param_list = [0.9, 1., 1.1]
@@ -113,11 +139,11 @@ susc_list = []
 corr_list = []
 for h_param in h_param_list:
   H, h_param = get_hamiltonian_TFI(h_param, lattice_sites)
-  t_arr, magn, susc, corr = calc_res(H, h_param, magn_op, corr_op_list, psi_init, lattice_sites, t_max=3)
+  t_arr, magn, susc, corr = calc_res(H, h_param, magn_op_single, corr_op_list, psi_init, lattice_sites, t_max=3)
   magn_list.append(magn)
   susc_list.append(susc)
   corr_list.append(corr)
-#plot_res(t_arr, magn_list[1], susc_list[1])
+plot_res(t_arr, h_param_list, magn_list)
 #print(susc_list)
 
 

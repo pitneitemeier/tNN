@@ -106,17 +106,19 @@ class ParametrizedSelfAttention(tNN.Wave_Fun):
 
 class TestModel(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, kernel_size, 
-            num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, total_steps,
-            init_decay=1):
+            num_conv_layers, num_conv_features, tNN_hidden, tNN_num_hidden, mult_size, psi_hidden, psi_num_hidden, 
+            init_decay=1, step_size=1, gamma=0.1, optimizer=torch.optim.Adam):
         super().__init__(lattice_sites = lattice_sites, name='FF')
         if mult_size % 2 != 0:
             mult_size+=1
         self.save_hyperparameters()
-        self.total_steps = total_steps
+        self.step_size = step_size
+        self.gamma = gamma
         self.lattice_sites = lattice_sites
         self.psi_init = psi_init
         self.init_decay = init_decay
         self.lr = learning_rate
+        self.opt = optimizer
 
         self.lattice_net = act.lattice_block(kernel_size, mult_size, num_conv_features, num_conv_layers, act_fun, self.lattice_sites)
         self.tNN = act.FeedForward(input_size=1+num_h_params, output_size=mult_size, hidden_size=tNN_hidden, num_hidden_layers=tNN_num_hidden, act_fun=act_fun)
@@ -128,12 +130,13 @@ class TestModel(tNN.Wave_Fun):
         t_out = self.tNN(alpha)
         comb = self.combination_block(lat_out, t_out)
         psi_out = self.psi(comb)
-        return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + self.psi_init(spins, self.lattice_sites)
+        return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + torch.exp(- self.init_decay * alpha[:, :1]) * self.psi_init(spins, self.lattice_sites)
+        #return (1 - torch.exp(- self.init_decay * alpha[:, :1]) ) * psi_out + self.psi_init(spins, self.lattice_sites)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
-        return {'optimizer': optimizer, 'lr_scheduler': {'scheduler': lr_scheduler, "interval": "epoch", 'frequency': 1}}
+        optimizer = self.opt(self.parameters(), lr=self.lr)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_size, verbose=True, gamma=self.gamma)
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'train_loss'}
 
 class SimpleModel(tNN.Wave_Fun):
     def __init__(self, lattice_sites, num_h_params, learning_rate, psi_init, act_fun, 

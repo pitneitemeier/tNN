@@ -69,7 +69,17 @@ class Test_Data(Dataset):
         return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index].unsqueeze(0), 
             'ED_magn': self.ED_magn[index], 'ED_susc': self.ED_susc[index], 'ED_corr': self.ED_corr[index]}
 
+class Simple_Data(Dataset):
+    def __init__(self, alpha):
+        self.len = alpha.shape[0]*alpha.shape[1] # #val sets * #t_val per set
+        self.num_t_val = alpha.shape[1]
+        self.alpha = alpha.flatten(0,1)
+        
+    def __len__(self):
+        return self.len
 
+    def __getitem__(self, index):
+        return {'val_set_idx': int(index/self.num_t_val), 'alpha': self.alpha[index]}
 
 if (__name__ == '__main__'):
    alpha = torch.cat((torch.arange(0, 10).reshape(1,-1,1).repeat(4, 1, 1), torch.arange(0,4).reshape(-1,1,1).repeat(1, 10, 1)), 2)

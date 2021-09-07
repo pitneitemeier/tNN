@@ -3,8 +3,13 @@ import Datasets
 import torch
 import utils
 import matplotlib.pyplot as plt
+
 from abc import ABC, abstractclassmethod
+from matplotlib import cm
 import numpy as np
+def get_figsize(width, ratio=1.61803):
+  return (width, width/ratio)
+plt.rcParams.update({'font.size': 8})
 
 class Condition(ABC):
     def __init__(self):
@@ -118,7 +123,7 @@ class ED_Validation(Condition):
         res_list.sort(key=lambda entry: entry['t'])
         res_list.sort(key=lambda entry: entry['val_set_idx'])
         
-        fig, ax = plt.subplots(figsize=(10,6))
+        fig, ax = plt.subplots(figsize=get_figsize(6))
         ax.set_xlabel('t')
         ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
         tot_title = f'Magnetization for {model.lattice_sites} Spins'
@@ -133,7 +138,7 @@ class ED_Validation(Condition):
             ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
             ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
         ax.legend()
-        fig.savefig(tot_title + f'.png')
+        fig.savefig(tot_title + f'.pdf')
         plt.close(fig)
 
 class ED_Test(Condition):
@@ -185,7 +190,7 @@ class ED_Test(Condition):
         corr = torch.stack(corr, dim=-1)
         loss = torch.mean(torch.abs(data_dict['ED_magn'] - magn)**2)
         alpha = data_dict['alpha'].clone()
-        h_res = utils.schrodinger_res_per_config(model, alpha, self.sampler, self.h_map, self.h_mat_list)
+        h_res = torch.max( torch.abs( utils.schrodinger_res_per_config(model, alpha, self.sampler, self.h_map, self.h_mat_list) ), dim=1)[0].squeeze(1)
         energy = model.measure_observable_compiled(alpha, self.sampler, self.h_mat_list, self.h_map)
         assert(self.sampler.is_MC==False)
         spins = self.sampler(model, data_dict['alpha'].clone())
@@ -224,22 +229,23 @@ class ED_Test(Condition):
 
         res_list.sort(key=lambda entry: entry['t'])
         res_list.sort(key=lambda entry: entry['val_set_idx'])
-        
-        fig, ax = plt.subplots(figsize=(10,6))
+        '''
+        fig, ax = plt.subplots(figsize=get_figsize(6))
         ax.set_xlabel('t')
-        ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
+        ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$')
         tot_title = f'Test magnetization for {model.lattice_sites} Spins'
         ax.set_title(tot_title)
         dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
+        '''
         num_t_values = self.alpha.shape[1]
-        tot_fig, tot_ax = plt.subplots(figsize=(10,6))
-        tot_ax.set_xlabel('ht')
+        tot_fig, tot_ax = plt.subplots(figsize=get_figsize(6))
+        tot_ax.set_xlabel('t')
         
         magn_name = self.magn_name
         corr_name = self.corr_name
         name= self.name
 
-        tot_ax.set_ylabel(r'$ \langle '+ magn_name +r' \rangle$', fontsize=13)
+        tot_ax.set_ylabel(r'$ \langle '+ magn_name +r' \rangle$', fontsize=8)
         tot_title = f'{name}, {model.lattice_sites} Spins'
         tot_ax.set_title(tot_title)
         dummy_lines = [tot_ax.plot([], [], c='black', ls='--', label='ED'), tot_ax.plot([], [], c='black', label='tNN')]
@@ -253,11 +259,12 @@ class ED_Test(Condition):
                 res_dict['susc'], res_dict['ED_susc'], res_dict['corr'], res_dict['ED_corr'], res_dict['h_res'], \
                 res_dict['energy'], res_dict['norm']
             #h_res_int = torch.mean(torch.abs(utils.primitive_fn(t_arr, h_res)), dim=1)
-            label = self.get_val_set_name(val_set_idx)
-            tot_ax.plot(t_arr, magn, label=label, c=f'C{val_set_idx}')
+            label = 'h = ' + str(self.get_val_set_name(val_set_idx))
+            tot_ax.plot(t_arr, magn, label=label, c=f'C{val_set_idx}', alpha=0.9)
             tot_ax.plot(t_arr, ED_magn, c=f'C{val_set_idx}', ls='--')
-            fig, ax = plt.subplots(4, 1, figsize=(10,6), sharex='col', gridspec_kw={'height_ratios': [2,2,1,1]})
-            fig.subplots_adjust(right=0.8)
+            tot_ax.plot(t_arr, ED_magn, c=f'black', ls='--', alpha=0.1)
+            fig, ax = plt.subplots(4, 1, figsize=get_figsize(6), sharex='col', gridspec_kw={'height_ratios': [2,2,1,1]})
+            fig.subplots_adjust(right=0.85)
             #ax[0,1].axis('off')
             #ax[1,1].axis('off')
             title = tot_title + ', ' + label
@@ -270,9 +277,16 @@ class ED_Test(Condition):
             ax[0].patch.set_visible(False)
             ax2_1.tick_params(axis='y', labelcolor='grey')
             ax2_1.set_ylabel('Residuals', c='grey')
-            ax2_1.plot(t_arr, torch.abs(ED_magn - magn), label='Residuals', c='grey', ls='dotted')
-            ax2_1.plot(t_arr, h_res_int, label='integrated pred error', c='grey', ls='dashed')
-            ax[0].legend()
+            ax2_1.plot(t_arr, ED_magn - magn, label='ED $-$ tNN', c='grey', ls='dotted')
+            max_diff = torch.max(torch.abs(ED_magn - magn))
+            max_diff *= 1.1
+            ax2_1.set_ylim(-max_diff, max_diff)
+            ax2_1.axhline(c='grey', alpha=0.3)
+            lines, labels = ax[0].get_legend_handles_labels()
+            lines2, labels2 = ax2_1.get_legend_handles_labels()
+            ax[0].legend(lines + lines2, labels + labels2)
+            #ax2_1.plot(t_arr, h_res, label='tNN res', c='grey', ls='dashed')
+            #ax2_1.plot(t_arr, h_res_int, label='integrated pred error', c='grey', ls='dashed')
             ax[1].plot(t_arr, susc.detach().cpu(), label='tNN', c='C0')
             ax[1].plot(t_arr, ED_susc, label = 'ED', ls='--', c='C1')
             ax2_1 = ax[1].twinx()
@@ -280,36 +294,38 @@ class ED_Test(Condition):
             ax[1].patch.set_visible(False)
             ax2_1.tick_params(axis='y', labelcolor='grey')
             ax2_1.set_ylabel('Residuals', c='grey')
-            ax2_1.plot(t_arr, ED_susc - susc.detach().cpu().numpy(), label='Residuals', c='grey', ls='dotted')
-            ax2_1.plot(t_arr, torch.mean(torch.abs(h_res), dim=1), label='tNN res', c='grey', ls='dashed')
-            ax[1].legend()
+            ax2_1.plot(t_arr, ED_susc - susc.detach().cpu().numpy(), label='ED $-$ tNN', c='grey', ls='dotted')
+            max_diff = torch.max(torch.abs(ED_susc - susc))
+            max_diff *= 1.1
+            ax2_1.set_ylim(-max_diff, max_diff)
+            ax2_1.axhline(c='grey', alpha=0.3)
+            lines, labels = ax[1].get_legend_handles_labels()
+            lines2, labels2 = ax2_1.get_legend_handles_labels()
+            ax[1].legend(lines + lines2, labels + labels2)
             
             y = np.arange(0,model.lattice_sites/2 + 1) + 0.5
             X, Y = np.meshgrid(t_arr, y)
-            c1 = ax[2].pcolor(X, Y, corr.cpu().transpose(0,1)[:, :-1], label='tNN')
-            #c1ax = fig.add_axes([0.8,0.2,0.1,.2])
-            #fig.colorbar(c1, ax=ax[2])
-            #X, Y = np.meshgrid(t_arr, y)
-            c2 = ax[3].pcolor(X, Y, ED_corr.cpu().transpose(0,1)[:, :-1], label='ED')
-            #c2ax = fig.add_axes([.8,0.,.15,.15])
-            cbar_ax = fig.add_axes([0.85, 0.11, 0.05, 0.25])
+            c1 = ax[2].pcolor(X, Y, corr.cpu().transpose(0,1)[:, :-1], label='tNN', rasterized=True)
+            c2 = ax[3].pcolor(X, Y, ED_corr.cpu().transpose(0,1)[:, :-1], label='ED', rasterized=True)
+            cbar_ax = fig.add_axes([0.87, 0.11, 0.02, 0.255])
             fig.colorbar(c2, cax=cbar_ax)
-            #fig.colorbar(c2, cax=ax[3,1])
             
             ax[2].set_yticks(y[:-1] + 0.5)
+            ax[2].tick_params(axis='y', labelsize=6)
             ax[2].legend()
             ax[3].set_yticks(y[:-1] + 0.5)
+            ax[3].tick_params(axis='y', labelsize=6)
             ax[3].legend()
             ax[3].set_xlabel('t')
-            ax[0].set_ylabel(r'$ \langle ' + magn_name + r' \rangle$', fontsize=13)
-            ax[1].set_ylabel(r'$ \frac{\partial \langle ' + magn_name + r' \rangle}{\partial h}$', fontsize=17)
+            ax[0].set_ylabel(r'$ \langle ' + magn_name + r' \rangle$', fontsize=8)
+            ax[1].set_ylabel(r'$ \frac{\partial \langle ' + magn_name + r' \rangle}{\partial h}$', fontsize=10)
             ax[2].set_ylabel(r'd')
             ax[3].set_ylabel(r'd')
             
             comm_ax = fig.add_subplot(313, frame_on=False)
             comm_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-            comm_ax.set_ylabel(r'$\langle ' + corr_name + '_i \cdot ' + corr_name + r'_{i+d} \rangle $'+ '\n\n', fontsize=13)
-            fig.savefig(self.plot_folder + title + '.png')
+            comm_ax.set_ylabel(r'$\langle ' + corr_name + '_i \cdot ' + corr_name + r'_{i+d} \rangle $', labelpad=25, fontsize=8)
+            fig.savefig(self.plot_folder + title + '.pdf')
             plt.close(fig)
             fig, ax = plt.subplots(2,1, sharex=True)
             ax[0].plot(t_arr, energy/energy[0]-1, label='relative energy')
@@ -317,12 +333,95 @@ class ED_Test(Condition):
             ax[1].set_xlabel('t')
             ax[0].set_ylabel('E')
             ax[1].set_ylabel(r'$ \langle \psi | \psi \rangle$')
-            fig.savefig(self.plot_folder + title + '_E_norm.png')
+            fig.savefig(self.plot_folder + title + '_E_norm.pdf')
+            fig, ax = plt.subplots()
+            ax.plot(torch.abs(ED_magn - magn), h_res)
+            fig.savefig(self.plot_folder + title + 'res_h_res.pdf')
 
         tot_ax.legend()
-        #tot_fig.tight_layout()
-        tot_fig.savefig(self.plot_folder + tot_title + '.png')
+        tot_fig.tight_layout()
+        tot_fig.savefig(self.plot_folder + tot_title + '.pdf')
         plt.close(fig)
+
+
+class magn_surface(Condition):
+    def __init__(self, magn_op, h_range, t_range, lattice_sites, sampler, name, plot_folder=''):
+        super().__init__()
+        resolution = 100
+        self.t_arr = torch.linspace(t_range[0], t_range[1], resolution)
+        self.h_arr = torch.linspace(0.2, 1.2, resolution)
+        self.alpha = torch.stack((self.t_arr.repeat(resolution,1), self.h_arr.unsqueeze(1).repeat(1,resolution)), dim=2).unsqueeze(-2)
+        self.sampler = sampler
+        self.MC_sampling = sampler.is_MC
+        self.magn_name = magn_op[0][0].name
+        self.name = name
+        self.plot_folder = plot_folder
+        self.magn_mat = utils.get_total_mat_els(magn_op, lattice_sites)
+        self.magn_map = utils.get_map(magn_op, lattice_sites)
+
+    def to(self, device):
+        self.magn_map = self.magn_map.to(device)
+        self.magn_mat = self.magn_mat.to(device)
+        self.device = device
+
+    def __str__(self):
+        return f'Condition used for a surface plot of magn'
+
+    def __call__(self, model, data_dict):
+        if not (model.device == self.device):
+            self.to(model.device)
+        magn = model.measure_observable_compiled(data_dict['alpha'], self.sampler, self.magn_mat, self.magn_map)
+        data_dict['t'] = data_dict['alpha'][:, 0, 0]
+        data_dict['h'] = data_dict['alpha'][:, 0, 1]
+        del data_dict['alpha']
+        data_dict['magn'] = magn
+
+        return 0, data_dict
+
+    def get_dataset(self):
+        return Datasets.Simple_Data(self.alpha)
+
+
+    def plot_results(self, model, res_dict):
+        # transform from dict of tensors into list of dicts for sorting
+        res_list = []
+        for i in range(len(res_dict['val_set_idx'])):
+            temp = {}
+            for key in res_dict:
+                temp[key] = res_dict[key][i]
+            res_list.append(temp)
+
+        res_list.sort(key=lambda entry: entry['t'])
+        res_list.sort(key=lambda entry: entry['val_set_idx'])
+
+        num_t_values = self.alpha.shape[1]
+        Z = np.empty((len(self.t_arr), len(self.h_arr)))
+        for i in range(int(len(res_list)/num_t_values)):
+            #transforming list of dicts back into dict of lists
+            key = 'magn'
+            Z[i] = torch.stack([dict[key] for dict in res_list[i*num_t_values:(i+1)*num_t_values]]).cpu()
+        fig, ax = plt.subplots(figsize=(7,5), subplot_kw={"projection": "3d"})
+
+        X = self.t_arr
+        Y = self.h_arr
+        '''
+        c = ax.pcolormesh(X,Y,Z, cmap=cm.inferno, rasterized=True, shading='gouraud')
+        fig.colorbar(c, shrink=0.5, aspect=5)
+        fig.savefig('test.png')
+        '''
+        X, Y = np.meshgrid(X, Y)
+
+        # Plot the surface.
+        surf = ax.plot_surface(X, Y, Z,
+                            linewidth=0, antialiased=False, cmap=cm.inferno, rasterized=True, rcount=100, ccount=100)
+        ax.set_xlabel('t')
+        ax.set_ylabel('h')
+        ax.set_zlabel(r'$ \langle ' + self.magn_name + r' \rangle$', fontsize=8)
+        # Add a color bar which maps values to colors.
+        fig.colorbar(surf, shrink=0.5, aspect=5, pad=0.1)
+
+        fig.savefig('test.pdf')
+
 
 #old:
 '''
