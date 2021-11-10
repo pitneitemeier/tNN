@@ -166,34 +166,13 @@ def calc_dt_psi(psi_s, alpha):
   dt_psi_s = dt_psi_s_real + 1.j * dt_psi_s_imag
   return dt_psi_s.unsqueeze(2)
 
+def calc_dt_psi_time_dep(psi_s, t):
+  #need to do real and imaginary part separately so pytorch can treat it as a real differentiation
+  dt_psi_s_real = torch.autograd.grad(torch.real(psi_s).sum(), t, create_graph=True)[0]
+  dt_psi_s_imag = torch.autograd.grad(torch.imag(psi_s).sum(), t, create_graph=True)[0]
+  dt_psi_s = dt_psi_s_real + 1.j * dt_psi_s_imag
+  return dt_psi_s.unsqueeze(2)
 
-def psi_norm_sq(psi_s):
-  '''
-  Returns the Norm of a Wave function batch wise
-  Parameters
-  ----------
-  psi_s : tensor
-    The wave function of input spins
-    shape = (num_alpha, num_spins, 1)
-  Returns
-  -------
-  norm : tensor
-    shape = (num_alpha, 1)  
-  '''
-  return (abs_sq(psi_s)).sum(1)
-
-def val_loss(psi_s, o_loc, o_target):
-  psi_sq_sum = (abs_sq(psi_s)).sum(1)
-  psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
-  observable = ( psi_s_o_loc_sum / psi_sq_sum ).squeeze()
-  loss = (abs_sq((observable - o_target))).sum(0)
-  return loss, torch.real(observable)
-
-def mc_val_loss(o_loc, o_target):
-  num_samples = o_loc.shape[1]
-  observable = o_loc.sum(1)/num_samples
-  loss = (abs_sq(observable - o_target)).sum()
-  return loss, torch.real(observable)
 
 
 def tensor_to_string(alist):
@@ -202,10 +181,11 @@ def tensor_to_string(alist):
     return s.format(*alist)
 
 def get_susceptibility(magnetization, alpha):
-  return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, :, 1].sum(1)
+  return torch.autograd.grad(magnetization.sum(), alpha, retain_graph=True)[0][:, :, -1].sum(1)
 
 def calc_h_mult(model, alpha, h_mat_list):
     assert(alpha.shape[1]==1)
+    assert(alpha.shape[2]==len(h_mat_list))
     num_summands = sum([tensor.shape[3] for tensor in h_mat_list])
     h_mult = torch.ones(alpha.shape[0], 1, num_summands, device=model.device)
     current_ind = h_mat_list[0].shape[3]
@@ -232,17 +212,24 @@ def schrodinger_res_per_config(model, alpha, sampler, h_map, h_mat_list):
     dt_psi_s = calc_dt_psi(psi_s, alpha)
     return dt_psi_s + 1j * h_loc
 
+def schrodinger_res_per_config_time_dep(model, t, h_func, sampler, h_map, h_mat_list):
+    t.requires_grad = True
+    h = h_func(t)
+    alpha = torch.stack((t,h), dim=2)
+    spins = sampler(model, alpha)
+    h_mult = calc_h_mult(model, alpha, h_mat_list)
+    #broadcast alpha to spin shape. cannot work on view as with spins since it requires grad
+    if (alpha.shape[1] == 1):
+        alpha = alpha.repeat(1, spins.shape[1], 1)
+    
+    psi_s = model.call_forward(spins, alpha)
+    sp_h = get_sp(spins, h_map)
+    psi_sp_h = model.call_forward_sp(sp_h, alpha)
+    h_mat = torch.cat(h_mat_list, dim=3)
+    h_loc = calc_Oloc(psi_sp_h, h_mat, spins, h_mult)
+    dt_psi_s = calc_dt_psi_time_dep(psi_s, t)
+    return dt_psi_s + 1j * h_loc
+
 def abs_sq(x):
   return x.real**2 + x.imag**2
 
-def primitive_fn(x, y):
-    print(x.shape, y.shape)
-    res = []
-    h = x
-    res.append(torch.zeros_like(y[0]))
-    for i in range(x.shape[0]-1):
-        h = (x[:i+1] - x[1:i+2]).reshape(-1,1,1)
-        print(h.shape, y[:i+1].shape)
-        res.append( torch.sum(h * y[:i+1], dim=0))
-    res = torch.stack(res, dim=0)
-    return res

@@ -35,7 +35,7 @@ def psi_init_x_forward(spins, lattice_sites):
 if __name__=='__main__':
     ### setting up hamiltonian
     lattice_sites = 4
-    init_polarization = 'z'
+    init_polarization = 'x'
     
     h1 = []
     for l in range(lattice_sites):
@@ -64,7 +64,7 @@ if __name__=='__main__':
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
     h_param_range = [(0.15, 1.4)]
 
-    tot_samples_epoch = 1e7
+    tot_samples_epoch = 1e6
     samples_per_alpha = 1
     tot_batch_size = 4000
     batch_size = int(tot_batch_size/samples_per_alpha)
@@ -73,44 +73,29 @@ if __name__=='__main__':
 
     h_param_dict = {'tot_samples':tot_samples_epoch, 'tot_batch':tot_batch_size, 'samples_per_alpha':samples_per_alpha}
     train_sampler = sampler.RandomSampler(lattice_sites, samples_per_alpha)
-    #val_sampler = sampler.MCMCSamplerChains(lattice_sites, num_samples=64, steps_to_equilibrium=100)
-    #val_sampler = sampler.MCMCSampler(lattice_sites, num_samples=256, steps_to_equilibrium=50)
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
         h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=epoch_len, exp_decay=False)
-    val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
-    #test_cond = cond.ED_Test(magn_op, corr_list, h_list, lattice_sites, ED_magn, ED_susc, ED_corr, val_alpha, val_h_params, val_sampler, 
-    #name=f'TFI{init_polarization}', plot_folder=f'results/TFI{lattice_sites}{init_polarization}/')
-    test_cond = cond.magn_surface(magn_op, [0.2,1.2], [0,3], lattice_sites, val_sampler, 'TFI')
 
+    val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
+    test_cond = cond.magn_surface(magn_op, [.2,1.2], [0,3], lattice_sites, val_sampler, 'TFI')
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=test_cond,
         batch_size=batch_size, val_batch_size=50, test_batch_size=2, num_workers=24)
-    model = models.TestModel(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_z_forward,
+
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
-        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, step_size=1, gamma=0.1, init_decay=1)
-    #model = models.ParametrizedFeedForward.load_from_checkpoint('chkpts/TFI_10_FF-epoch=13-val_loss=0.00.ckpt')
+        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, step_size=1, gamma=0.5, init_decay=1)
 
     from pytorch_lightning.callbacks import LearningRateMonitor
     from pytorch_lightning.callbacks import ModelCheckpoint
     checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}{init_polarization}_'+model.name+'-{epoch:02d}-{val_loss:.6f}')
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    
-    neptune_logger = NeptuneLogger(
-            api_key='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjMjAxNDViMi1mOWFjLTRlODEtYmZiZi02MDA4ZDIyMTYxODEifQ==',
-            project='pitneitemeier/tNN', 
-            name=f'TFI{init_polarization}',
-            close_after_fit=False
-        )
-    neptune_logger.log_hyperparams(h_param_dict)
 
-    trainer = pl.Trainer(fast_dev_run=False, gpus=[0,1], max_epochs=2,
-        auto_select_gpus=True, gradient_clip_val=.5, val_check_interval=.25,
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=5,
+        auto_select_gpus=True, gradient_clip_val=.5, val_check_interval=.1,
         callbacks=[lr_monitor, checkpoint_callback],
-        deterministic=False, logger=neptune_logger,
+        deterministic=False,
         accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
-    #trainer.tune(model, env)
     trainer.fit(model, env)
-    #trainer.save_checkpoint(f'TFI{lattice_sites}{init_polarization}_FF_2.ckpt')
-    #trainer.test(model=model, datamodule=env)
