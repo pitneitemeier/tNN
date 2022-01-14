@@ -14,8 +14,7 @@ import utils
 import example_operators as ex_op
 import models
 import sampler
-from neptune.new.integrations.pytorch_lightning import NeptuneLogger
-#torch.set_default_dtype(torch.float32)
+
 
 def psi_init_z(spins):
     return (spins.sum(2) == spins.shape[2]).type(torch.get_default_dtype())
@@ -58,44 +57,32 @@ if __name__=='__main__':
     val_alpha = np.concatenate(
         (np.broadcast_to(val_t_arr.reshape(1,-1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1)), 
         np.broadcast_to(val_h_params.reshape(-1,1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1))), 2)
+
     print('validating on h= ', val_h_params)
+
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
     ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
     ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
+
+    ### Defining the range for the external parameter that is trained
     h_param_range = [(0.15, 1.4)]
 
-    tot_samples_epoch = 1e6
-    samples_per_alpha = 1
-    tot_batch_size = 4000
-    batch_size = int(tot_batch_size/samples_per_alpha)
-    epoch_len = int(tot_samples_epoch/samples_per_alpha)
-    steps = int(epoch_len/batch_size)
-
-    h_param_dict = {'tot_samples':tot_samples_epoch, 'tot_batch':tot_batch_size, 'samples_per_alpha':samples_per_alpha}
-    train_sampler = sampler.RandomSampler(lattice_sites, samples_per_alpha)
+    ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
+    train_sampler = sampler.RandomSampler(lattice_sites, 1)
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=epoch_len, exp_decay=False)
-
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(5e4), exp_decay=False)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
-    test_cond = cond.magn_surface(magn_op, [.2,1.2], [0,3], lattice_sites, val_sampler, 'TFI')
-    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=test_cond,
-        batch_size=batch_size, val_batch_size=50, test_batch_size=2, num_workers=24)
 
+    env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
+        batch_size=100, val_batch_size=50, test_batch_size=2, num_workers=24)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
-        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=24,
-        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=80, psi_num_hidden=3, step_size=1, gamma=0.5, init_decay=1)
-
-    from pytorch_lightning.callbacks import LearningRateMonitor
-    from pytorch_lightning.callbacks import ModelCheckpoint
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss', dirpath='chkpts/', filename=f'TFI_{lattice_sites}{init_polarization}_'+model.name+'-{epoch:02d}-{val_loss:.6f}')
-    lr_monitor = LearningRateMonitor(logging_interval='step')
-
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=5,
-        auto_select_gpus=True, gradient_clip_val=.5, val_check_interval=.1,
-        callbacks=[lr_monitor, checkpoint_callback],
-        deterministic=False,
-        accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
+        act_fun=nn.GELU, kernel_size=2, num_conv_layers=3, num_conv_features=16,
+        tNN_hidden=32, tNN_num_hidden=3, mult_size=512, psi_hidden=32, psi_num_hidden=3, step_size=2, gamma=0.1, init_decay=1)
+    
+    trainer = pl.Trainer(fast_dev_run=False, gpus=2, max_epochs=3, 
+        auto_select_gpus=True, accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     trainer.fit(model, env)
+
