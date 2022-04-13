@@ -29,7 +29,7 @@ def psi_init_x_forward(spins, lattice_sites):
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 4
+    lattice_sites = 14
     init_polarization = 'x'
     
     h1 = []
@@ -69,16 +69,16 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(1e5), exp_decay=False)
-    val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(1e4), exp_decay=False)
+    val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
-        batch_size=100, val_batch_size=50, test_batch_size=2, num_workers=24)
+        batch_size=100, val_batch_size=50, test_batch_size=2, num_workers=18)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=2, num_conv_layers=3, num_conv_features=16,
         tNN_hidden=32, tNN_num_hidden=3, mult_size=512, psi_hidden=32, psi_num_hidden=3, step_size=2, gamma=0.1, init_decay=1)
     
-    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=3, 
-        auto_select_gpus=True, accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=1,
+                        accelerator="gpu", devices=2, strategy="ddp")
     trainer.fit(model, env)
 

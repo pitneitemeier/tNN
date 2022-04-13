@@ -1,16 +1,19 @@
-#!/bin/bash
-#SBATCH --nodes=1
-#SBATCH --account=thes1051
-#SBATCH --cpus-per-task=48
-#SBATCH --job-name=TFI10pulse
-#SBATCH --partition=c18g
-#SBATCH --gres=gpu:volta:2
-#SBATCH --time=0-5:00:00
-#SBATCH --output=out/slurmTFI10pulse_FF_2.out
+#!/bin/bash -l
+# Initial working directory:
+#SBATCH -D ./
+# Job name
+#SBATCH -J TFI4
+#
+#SBATCH --ntasks=1
+#SBATCH --constraint="gpu"
+#
+# --- default case: use a single GPU on a shared node ---
+#SBATCH --gres=gpu:a100:2
+#SBATCH --cpus-per-task=36 
+#SBATCH --mem=250000
+#SBATCH --time=0:05:00
+#SBATCH --output=out/TFI4raven.out
+#SBATCH --mail-type=none
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
-#SBATCH --mail-type=ALL
 
-
-module load python
-module load cuda/11.4
-python3 TFIz_pulse.py
+./runner.sh
