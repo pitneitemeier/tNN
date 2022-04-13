@@ -118,7 +118,10 @@ class Wave_Fun(LightningModule):
         #print(res[0][0])
         #print(res[0][0].shape)
         res = torch.cat(res, dim=0)
-        res = self.all_gather(res).flatten(0,1)
+        res = self.all_gather(res)
+        if len(res.shape)==4:
+            print("gathering tensors from all devices")
+            res = res.flatten(0,1)
         
         if self.global_rank==0:
             self.trainer.datamodule.val_condition.plot_results(self, res)
