@@ -106,6 +106,76 @@ class schrodinger_eq_per_config(Condition):
     def get_dataset(self):
         return Datasets.Train_Data(t_range=self.t_range, h_param_range=self.h_param_range, epoch_len=self.epoch_len)
 
+class Simple_ED_Validation(Condition):
+    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png'):
+        super().__init__()
+        self.sampler = sampler
+        self.MC_sampling = sampler.is_MC
+        self.ED_data = torch.from_numpy(ED_data).type(torch.get_default_dtype())
+        self.val_names = val_names
+        self.alpha = torch.from_numpy(alpha).type(torch.get_default_dtype())
+        self.obs_mat = utils.get_total_mat_els(obs, lattice_sites)
+        self.obs_map = utils.get_map(obs, lattice_sites)
+        self.plot_fmt = plot_fmt
+
+    def to(self, device):
+        #self.ED_data = self.ED_data.to(device)
+        self.obs_map = self.obs_map.to(device)
+        self.obs_mat = self.obs_mat.to(device)
+        self.device = device
+
+    def __str__(self):
+        return f'Condition to match ED_data'
+
+    def __call__(self, model, data_dict):
+        if not (model.device == self.device):
+            self.to(model.device)
+
+        res = []
+        loss = 0
+        for i, alpha in enumerate(data_dict["alpha"]):
+            #print(alpha[:,0])
+            alpha = alpha.unsqueeze(1) #unsqueeze spin dimension to correspond to expected shape
+            observable = model.measure_observable_compiled(alpha, self.sampler, self.obs_mat, self.obs_map)
+            loss += torch.mean(torch.abs(data_dict['ED_data'][i] - observable)**2)
+            res.append(torch.stack((alpha.squeeze()[:,0],observable,data_dict['ED_data'][i]), dim=1))
+        res = torch.stack(res, dim=0)
+        loss /= i
+        return loss, res
+
+    def get_num_val_sets(self):
+        return len(self.val_names)
+
+    def get_val_set_name(self, val_set_idx):
+        return self.val_names[val_set_idx]
+
+    def get_dataset(self):
+        return Datasets.Simple_Val_Data(self.alpha, self.ED_data)
+
+    def plot_results(self, model, res):
+        res = res.cpu()
+        fig, ax = plt.subplots(figsize=get_figsize(6))
+        ax.set_xlabel('t')
+        ax.set_ylabel(r'$ \langle '+ 'S^x' +r' \rangle$', fontsize=13)
+        tot_title = f'Magnetization for {model.lattice_sites} Spins'
+        ax.set_title(tot_title)
+        dummy_lines = [ax.plot([], [], c='black', ls='--', label='ED'), ax.plot([], [], c='black', label='tNN')]
+        num_t_values = self.alpha.shape[1]
+        for i in range(res.shape[1]):
+            val_set_idx = i
+            t_arr = res[:,i,0]
+            #sorting by t value
+            t_arr, ind = t_arr.sort()
+            observable = res[:,i,1][ind]
+            ED_observable = res[:,i,2][ind]
+            #t_arr, observable, ED_observable = res_dict['val_set_idx'][0], res_dict['t'], res_dict['observable'], res_dict['ED_data']
+            label = self.get_val_set_name(val_set_idx)
+            ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
+            ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
+        ax.legend()
+        fig.savefig(tot_title + self.plot_fmt)
+        plt.close(fig)
+
 class ED_Validation(Condition):
     def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png'):
         super().__init__()

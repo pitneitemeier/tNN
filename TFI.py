@@ -3,14 +3,10 @@ from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.plugins import DDPPlugin
 import torch
 from torch import nn
-from torch.utils import data
-import activations as act
 import Operator as op
 import numpy as np
-import matplotlib.pyplot as plt
 import condition as cond
 import tNN
-import utils
 import example_operators as ex_op
 import models
 import sampler
@@ -73,7 +69,7 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(5e4), exp_decay=False)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(1e5), exp_decay=False)
     val_cond = cond.ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
@@ -82,7 +78,7 @@ if __name__=='__main__':
         act_fun=nn.GELU, kernel_size=2, num_conv_layers=3, num_conv_features=16,
         tNN_hidden=32, tNN_num_hidden=3, mult_size=512, psi_hidden=32, psi_num_hidden=3, step_size=2, gamma=0.1, init_decay=1)
     
-    trainer = pl.Trainer(fast_dev_run=False, gpus=2, max_epochs=3, 
+    trainer = pl.Trainer(fast_dev_run=False, gpus=1, max_epochs=3, 
         auto_select_gpus=True, accelerator='ddp', plugins=DDPPlugin(find_unused_parameters=False))
     trainer.fit(model, env)
 
