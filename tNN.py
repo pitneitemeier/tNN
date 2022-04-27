@@ -115,12 +115,10 @@ class Wave_Fun(LightningModule):
         return res
     
     def validation_epoch_end(self, res):
-        #print(res[0][0])
-        #print(res[0][0].shape)
         res = torch.cat(res, dim=0)
         res = self.all_gather(res)
         if len(res.shape)==4:
-            print("gathering tensors from all devices")
+            #print("gathering tensors from all devices")
             res = res.flatten(0,1)
         
         if self.global_rank==0:
@@ -128,30 +126,19 @@ class Wave_Fun(LightningModule):
 
     def test_step(self, data_dict, index):
         torch.set_grad_enabled(True)
-        loss, res_dict = self.trainer.datamodule.test_condition(self, data_dict)
+        loss, res = self.trainer.datamodule.test_condition(self, data_dict)
         self.log('test_loss', loss, prog_bar=True)
-        return res_dict
+        return res
     
-    def test_epoch_end(self, outs):
-        #creating a dict with the results of all batches for one accelerator. 
-        #first creating a list of tensors with all batches and then concatenating this list into one tensor
-        res_dict = {key: [] for key in outs[0].keys()}
-        for i, out in enumerate(outs):
-            for key in out:
-                res_dict[key].append(out[key])
-        #concatenate the list of batch tensors into one
-        for key in res_dict:
-            res_dict[key] = torch.cat(res_dict[key])
+    def test_epoch_end(self, res):
+        res = torch.cat(res, dim=0)
+        res = self.all_gather(res)
+        if len(res.shape)==4:
+            #print("gathering tensors from all devices")
+            res = res.flatten(0,1)
         
-        #gathering the tensors from all accelerators
-        res_dict = self.all_gather(res_dict)
-        #with multi gpu training need to flatten batch axis from multiple gpus after gathering
-        if len(res_dict['val_set_idx'].shape)==2:
-            for key in res_dict:
-                res_dict[key] = res_dict[key].flatten(0,1)
-        
-        self.trainer.datamodule.test_condition.plot_results(self, res_dict)
-
+        if self.global_rank==0:
+            self.trainer.datamodule.test_condition.plot_results(self, res)
 
     def measure_observable_compiled(self, alpha, sampler, obs_mat, obs_map):
         '''

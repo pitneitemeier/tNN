@@ -107,7 +107,7 @@ class schrodinger_eq_per_config(Condition):
         return Datasets.Train_Data(t_range=self.t_range, h_param_range=self.h_param_range, epoch_len=self.epoch_len)
 
 class Simple_ED_Validation(Condition):
-    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png'):
+    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png', name_app=''):
         super().__init__()
         self.sampler = sampler
         self.MC_sampling = sampler.is_MC
@@ -117,6 +117,7 @@ class Simple_ED_Validation(Condition):
         self.obs_mat = utils.get_total_mat_els(obs, lattice_sites)
         self.obs_map = utils.get_map(obs, lattice_sites)
         self.plot_fmt = plot_fmt
+        self.name_app = name_app
 
     def to(self, device):
         #self.ED_data = self.ED_data.to(device)
@@ -138,6 +139,10 @@ class Simple_ED_Validation(Condition):
             alpha = alpha.unsqueeze(1) #unsqueeze spin dimension to correspond to expected shape
             observable = model.measure_observable_compiled(alpha, self.sampler, self.obs_mat, self.obs_map)
             loss += torch.mean(torch.abs(data_dict['ED_data'][i] - observable)**2)
+            #print("i= ", i)
+            #print("alpha shape",alpha.shape)
+            #print("observable shape", observable.shape)
+            #print("Ed data shape", data_dict['ED_data'][i].shape)
             res.append(torch.stack((alpha.squeeze()[:,0],observable,data_dict['ED_data'][i]), dim=1))
         res = torch.stack(res, dim=0)
         loss /= i
@@ -173,7 +178,7 @@ class Simple_ED_Validation(Condition):
             ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
             ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
         ax.legend()
-        fig.savefig(tot_title + self.plot_fmt)
+        fig.savefig(tot_title + self.name_app + self.plot_fmt)
         plt.close(fig)
 
 class ED_Validation(Condition):

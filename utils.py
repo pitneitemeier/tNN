@@ -161,7 +161,7 @@ def get_all_spin_configs(num_lattice_sites):
 
 def get_all_spin_configs(lattice_sites):
     mask = 2**torch.arange(lattice_sites)
-    return 2*(torch.arange(0,2**lattice_sites).unsqueeze(-1).bitwise_and(mask).ne(0)).to(torch.int8) - 1
+    return 2*(torch.arange(0,2**lattice_sites).unsqueeze(-1).bitwise_and(mask).ne(0)) - 1
 
 
 def calc_dt_psi(psi_s, alpha):

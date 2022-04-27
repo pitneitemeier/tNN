@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 device = 'cpu'
-lattice_sites = 14
+lattice_sites = 15
 print(f'starting for {lattice_sites} lattice sites', flush=True)
 
 def e_i(index, size):

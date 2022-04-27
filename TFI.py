@@ -25,7 +25,7 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-
+name = "_large_model"
 
 if __name__=='__main__':
     ### setting up hamiltonian
@@ -57,11 +57,9 @@ if __name__=='__main__':
     print('validating on h= ', val_h_params)
 
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
-    ED_susc = np.loadtxt(folder + 'ED_susc' + append, delimiter=',')
-    ED_corr = np.loadtxt(folder + 'ED_corr' + append, delimiter=',').reshape(ED_magn.shape[0], ED_magn.shape[1], int(lattice_sites/2))
 
     ### Defining the range for the external parameter that is trained
-    h_param_range = [(0.15, 1.4)]
+    h_param_range = [(0.15, 1.35)]
 
     ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
     train_sampler = sampler.RandomSampler(lattice_sites, 1)
@@ -69,16 +67,24 @@ if __name__=='__main__':
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(1e4), exp_decay=False)
-    val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler)
+        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=int(1e8), exp_decay=False)
+    val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
-        batch_size=100, val_batch_size=50, test_batch_size=2, num_workers=18)
+        batch_size=4000, val_batch_size=5, test_batch_size=5, num_workers=36)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
-        act_fun=nn.GELU, kernel_size=2, num_conv_layers=3, num_conv_features=16,
-        tNN_hidden=32, tNN_num_hidden=3, mult_size=512, psi_hidden=32, psi_num_hidden=3, step_size=2, gamma=0.1, init_decay=1)
+        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
+        tNN_hidden=256, tNN_num_hidden=3, mult_size=1024, psi_hidden=128, psi_num_hidden=3, step_size=5, gamma=0.1)
     
-    trainer = pl.Trainer(fast_dev_run=False, max_epochs=1,
+    from pytorch_lightning.loggers import NeptuneLogger
+    neptune_logger = NeptuneLogger(
+        api_key='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjMjAxNDViMi1mOWFjLTRlODEtYmZiZi02MDA4ZDIyMTYxODEifQ==',
+        project='pitneitemeier/tNN', 
+        name=f'TFI {lattice_sites}{init_polarization}'+name,
+    )    
+
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=15, gradient_clip_val=.5,
+                        logger=neptune_logger,
                         accelerator="gpu", devices=2, strategy="ddp")
     trainer.fit(model, env)
-
+    trainer.save_checkpoint(f"TFI{lattice_sites}{init_polarization}"+name+'.ckpt')
