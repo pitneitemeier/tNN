@@ -25,7 +25,7 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-name = "_large_model"
+name = "_small_range"
 
 if __name__=='__main__':
     ### setting up hamiltonian
@@ -59,7 +59,7 @@ if __name__=='__main__':
     ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
 
     ### Defining the range for the external parameter that is trained
-    h_param_range = [(0.15, 1.35)]
+    h_param_range = [(0.5, 1.4)]
 
     ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
     train_sampler = sampler.RandomSampler(lattice_sites, 1)
@@ -74,7 +74,7 @@ if __name__=='__main__':
         batch_size=4000, val_batch_size=5, test_batch_size=5, num_workers=36)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
-        tNN_hidden=256, tNN_num_hidden=3, mult_size=1024, psi_hidden=128, psi_num_hidden=3, step_size=5, gamma=0.1)
+        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=128, psi_num_hidden=3, step_size=3, gamma=0.1)
     
     from pytorch_lightning.loggers import NeptuneLogger
     neptune_logger = NeptuneLogger(
@@ -83,7 +83,7 @@ if __name__=='__main__':
         name=f'TFI {lattice_sites}{init_polarization}'+name,
     )    
 
-    trainer = pl.Trainer(fast_dev_run=False, max_epochs=15, gradient_clip_val=.5,
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=9, gradient_clip_val=.5,
                         logger=neptune_logger,
                         accelerator="gpu", devices=2, strategy="ddp")
     trainer.fit(model, env)

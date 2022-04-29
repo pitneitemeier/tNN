@@ -1,0 +1,66 @@
+starting for 15 lattice sites
+initialized matrices
+building initial state
+building magn op
+summand of magn #0
+summand of magn #1
+summand of magn #2
+summand of magn #3
+summand of magn #4
+summand of magn #5
+summand of magn #6
+summand of magn #7
+summand of magn #8
+summand of magn #9
+summand of magn #10
+summand of magn #11
+summand of magn #12
+summand of magn #13
+summand of magn #14
+starting h = 0.2
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+summand of H #14
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** STEP 1714455.0 ON ravc2384 CANCELLED AT 2022-04-13T19:42:20 DUE TO TIME LIMIT ***
+slurmstepd: error: *** JOB 1714455 ON ravc2384 CANCELLED AT 2022-04-13T19:42:20 DUE TO TIME LIMIT ***
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: pitneitemeier(84612)
+Job name:  TFI15ED
+Node list: ravc2384
+Job start: Wed Apr 13 17:42:06 CEST 2022
+Job end:   Wed Apr 13 19:42:20 CEST 2022
+Work dir:  /u/pitneitemeier/tNN/ED_data/./
+Command:   /raven/u/pitneitemeier/tNN/ED_data/s_batch_runner_ed.sh
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+       JobID    JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode 
+------------ ---------- ------ ------ ------ ------------ ------------ ---------- -------- 
+1714455         TFI15ED      1           144                             02:00:14      0:0 
+1714455.0       python3      1      1    144    41259.65M    41259.65M   02:00:14     0:15 
+  
+Maximum memory per node: 42.2499 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 11.7 %
+     
