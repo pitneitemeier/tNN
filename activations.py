@@ -150,11 +150,6 @@ class Attention_Block(nn.Module):
     out = self.linear_conv2( self.relu( self.linear_conv1(att_out + input) ) )
     return out + att_out + input
 
-import copy
-def clones(module, N):
-    "Produce N identical layers."
-    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
-
 
 class Identity(nn.Module):
   def __init__(self):

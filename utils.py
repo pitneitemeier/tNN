@@ -143,7 +143,7 @@ def calc_Oloc_MC(psi_sp, psi_s, mat_els, spin_config, ext_param_scale = None):
   O_loc = (torch.conj(res.unsqueeze(3)) * psi_sp).sum(2)/psi_s
   return O_loc
 
-
+"""
 from itertools import permutations
 #get all basis configurations to calculate stochastic mean
 def get_all_spin_configs(num_lattice_sites):
@@ -157,6 +157,11 @@ def get_all_spin_configs(num_lattice_sites):
       perm[currently_filled, :] = row
       currently_filled += 1
   return torch.from_numpy(perm)
+"""
+
+def get_all_spin_configs(lattice_sites):
+    mask = 2**torch.arange(lattice_sites)
+    return 2*(torch.arange(0,2**lattice_sites).unsqueeze(-1).bitwise_and(mask).ne(0)) - 1
 
 
 def calc_dt_psi(psi_s, alpha):

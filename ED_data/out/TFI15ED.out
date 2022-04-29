@@ -1,0 +1,346 @@
+(OK) Loading python 3.9.6
+(!!) The SciPy Stack is available: http://www.scipy.org/stackspec.html
+ Built with GCC compilers.
+starting for 14 lattice sites
+initialized matrices
+building initial state
+building magn op
+summand of magn #0
+summand of magn #1
+summand of magn #2
+summand of magn #3
+summand of magn #4
+summand of magn #5
+summand of magn #6
+summand of magn #7
+summand of magn #8
+summand of magn #9
+summand of magn #10
+summand of magn #11
+summand of magn #12
+summand of magn #13
+starting h = 0.2
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+calculating for t=0.0
+calculating for t=0.06122449040412903
+calculating for t=0.12244898080825806
+calculating for t=0.18367347121238708
+calculating for t=0.2448979616165161
+calculating for t=0.30612245202064514
+calculating for t=0.36734694242477417
+calculating for t=0.4285714328289032
+calculating for t=0.4897959232330322
+calculating for t=0.5510203838348389
+calculating for t=0.6122449040412903
+calculating for t=0.6734694242477417
+calculating for t=0.7346938848495483
+calculating for t=0.795918345451355
+calculating for t=0.8571428656578064
+calculating for t=0.9183673858642578
+calculating for t=0.9795918464660645
+calculating for t=1.040816307067871
+calculating for t=1.1020407676696777
+calculating for t=1.163265347480774
+calculating for t=1.2244898080825806
+calculating for t=1.2857142686843872
+calculating for t=1.3469388484954834
+calculating for t=1.40816330909729
+calculating for t=1.4693877696990967
+calculating for t=1.5306122303009033
+calculating for t=1.59183669090271
+calculating for t=1.6530612707138062
+calculating for t=1.7142857313156128
+calculating for t=1.7755101919174194
+calculating for t=1.8367347717285156
+calculating for t=1.8979592323303223
+calculating for t=1.959183692932129
+calculating for t=2.0204081535339355
+calculating for t=2.081632614135742
+calculating for t=2.142857074737549
+calculating for t=2.2040815353393555
+calculating for t=2.265306234359741
+calculating for t=2.326530694961548
+calculating for t=2.3877551555633545
+calculating for t=2.448979616165161
+calculating for t=2.5102040767669678
+calculating for t=2.5714285373687744
+calculating for t=2.632652997970581
+calculating for t=2.693877696990967
+calculating for t=2.7551021575927734
+calculating for t=2.81632661819458
+calculating for t=2.8775510787963867
+calculating for t=2.9387755393981934
+calculating for t=3.0
+starting h = 0.4
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+calculating for t=0.0
+calculating for t=0.06122449040412903
+calculating for t=0.12244898080825806
+calculating for t=0.18367347121238708
+calculating for t=0.2448979616165161
+calculating for t=0.30612245202064514
+calculating for t=0.36734694242477417
+calculating for t=0.4285714328289032
+calculating for t=0.4897959232330322
+calculating for t=0.5510203838348389
+calculating for t=0.6122449040412903
+calculating for t=0.6734694242477417
+calculating for t=0.7346938848495483
+calculating for t=0.795918345451355
+calculating for t=0.8571428656578064
+calculating for t=0.9183673858642578
+calculating for t=0.9795918464660645
+calculating for t=1.040816307067871
+calculating for t=1.1020407676696777
+calculating for t=1.163265347480774
+calculating for t=1.2244898080825806
+calculating for t=1.2857142686843872
+calculating for t=1.3469388484954834
+calculating for t=1.40816330909729
+calculating for t=1.4693877696990967
+calculating for t=1.5306122303009033
+calculating for t=1.59183669090271
+calculating for t=1.6530612707138062
+calculating for t=1.7142857313156128
+calculating for t=1.7755101919174194
+calculating for t=1.8367347717285156
+calculating for t=1.8979592323303223
+calculating for t=1.959183692932129
+calculating for t=2.0204081535339355
+calculating for t=2.081632614135742
+calculating for t=2.142857074737549
+calculating for t=2.2040815353393555
+calculating for t=2.265306234359741
+calculating for t=2.326530694961548
+calculating for t=2.3877551555633545
+calculating for t=2.448979616165161
+calculating for t=2.5102040767669678
+calculating for t=2.5714285373687744
+calculating for t=2.632652997970581
+calculating for t=2.693877696990967
+calculating for t=2.7551021575927734
+calculating for t=2.81632661819458
+calculating for t=2.8775510787963867
+calculating for t=2.9387755393981934
+calculating for t=3.0
+starting h = 0.7
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+calculating for t=0.0
+calculating for t=0.06122449040412903
+calculating for t=0.12244898080825806
+calculating for t=0.18367347121238708
+calculating for t=0.2448979616165161
+calculating for t=0.30612245202064514
+calculating for t=0.36734694242477417
+calculating for t=0.4285714328289032
+calculating for t=0.4897959232330322
+calculating for t=0.5510203838348389
+calculating for t=0.6122449040412903
+calculating for t=0.6734694242477417
+calculating for t=0.7346938848495483
+calculating for t=0.795918345451355
+calculating for t=0.8571428656578064
+calculating for t=0.9183673858642578
+calculating for t=0.9795918464660645
+calculating for t=1.040816307067871
+calculating for t=1.1020407676696777
+calculating for t=1.163265347480774
+calculating for t=1.2244898080825806
+calculating for t=1.2857142686843872
+calculating for t=1.3469388484954834
+calculating for t=1.40816330909729
+calculating for t=1.4693877696990967
+calculating for t=1.5306122303009033
+calculating for t=1.59183669090271
+calculating for t=1.6530612707138062
+calculating for t=1.7142857313156128
+calculating for t=1.7755101919174194
+calculating for t=1.8367347717285156
+calculating for t=1.8979592323303223
+calculating for t=1.959183692932129
+calculating for t=2.0204081535339355
+calculating for t=2.081632614135742
+calculating for t=2.142857074737549
+calculating for t=2.2040815353393555
+calculating for t=2.265306234359741
+calculating for t=2.326530694961548
+calculating for t=2.3877551555633545
+calculating for t=2.448979616165161
+calculating for t=2.5102040767669678
+calculating for t=2.5714285373687744
+calculating for t=2.632652997970581
+calculating for t=2.693877696990967
+calculating for t=2.7551021575927734
+calculating for t=2.81632661819458
+calculating for t=2.8775510787963867
+calculating for t=2.9387755393981934
+calculating for t=3.0
+starting h = 1.0
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+calculating for t=0.0
+calculating for t=0.06122449040412903
+calculating for t=0.12244898080825806
+calculating for t=0.18367347121238708
+calculating for t=0.2448979616165161
+calculating for t=0.30612245202064514
+calculating for t=0.36734694242477417
+calculating for t=0.4285714328289032
+calculating for t=0.4897959232330322
+calculating for t=0.5510203838348389
+calculating for t=0.6122449040412903
+calculating for t=0.6734694242477417
+calculating for t=0.7346938848495483
+calculating for t=0.795918345451355
+calculating for t=0.8571428656578064
+calculating for t=0.9183673858642578
+calculating for t=0.9795918464660645
+calculating for t=1.040816307067871
+calculating for t=1.1020407676696777
+calculating for t=1.163265347480774
+calculating for t=1.2244898080825806
+calculating for t=1.2857142686843872
+calculating for t=1.3469388484954834
+calculating for t=1.40816330909729
+calculating for t=1.4693877696990967
+calculating for t=1.5306122303009033
+calculating for t=1.59183669090271
+calculating for t=1.6530612707138062
+calculating for t=1.7142857313156128
+calculating for t=1.7755101919174194
+calculating for t=1.8367347717285156
+calculating for t=1.8979592323303223
+calculating for t=1.959183692932129
+calculating for t=2.0204081535339355
+calculating for t=2.081632614135742
+calculating for t=2.142857074737549
+calculating for t=2.2040815353393555
+calculating for t=2.265306234359741
+calculating for t=2.326530694961548
+calculating for t=2.3877551555633545
+calculating for t=2.448979616165161
+calculating for t=2.5102040767669678
+calculating for t=2.5714285373687744
+calculating for t=2.632652997970581
+calculating for t=2.693877696990967
+calculating for t=2.7551021575927734
+calculating for t=2.81632661819458
+calculating for t=2.8775510787963867
+calculating for t=2.9387755393981934
+calculating for t=3.0
+starting h = 1.3
+summand of H #0
+summand of H #1
+summand of H #2
+summand of H #3
+summand of H #4
+summand of H #5
+summand of H #6
+summand of H #7
+summand of H #8
+summand of H #9
+summand of H #10
+summand of H #11
+summand of H #12
+summand of H #13
+calculating for t=0.0
+calculating for t=0.06122449040412903
+calculating for t=0.12244898080825806
+calculating for t=0.18367347121238708
+calculating for t=0.2448979616165161
+calculating for t=0.30612245202064514
+calculating for t=0.36734694242477417
+calculating for t=0.4285714328289032
+calculating for t=0.4897959232330322
+calculating for t=0.5510203838348389
+calculating for t=0.6122449040412903
+calculating for t=0.6734694242477417
+calculating for t=0.7346938848495483
+calculating for t=0.795918345451355
+calculating for t=0.8571428656578064
+calculating for t=0.9183673858642578
+calculating for t=0.9795918464660645
+calculating for t=1.040816307067871
+calculating for t=1.1020407676696777
+calculating for t=1.163265347480774
+calculating for t=1.2244898080825806
+calculating for t=1.2857142686843872
+calculating for t=1.3469388484954834
+calculating for t=1.40816330909729
+calculating for t=1.4693877696990967
+calculating for t=1.5306122303009033
+calculating for t=1.59183669090271
+calculating for t=1.6530612707138062
+calculating for t=1.7142857313156128
+calculating for t=1.7755101919174194
+calculating for t=1.8367347717285156
+calculating for t=1.8979592323303223
+calculating for t=1.959183692932129
+calculating for t=2.0204081535339355
+calculating for t=2.081632614135742
+calculating for t=2.142857074737549
+calculating for t=2.2040815353393555
+calculating for t=2.265306234359741
+calculating for t=2.326530694961548
+calculating for t=2.3877551555633545
+calculating for t=2.448979616165161
+calculating for t=2.5102040767669678
+calculating for t=2.5714285373687744
+calculating for t=2.632652997970581
+calculating for t=2.693877696990967
+calculating for t=2.7551021575927734
+calculating for t=2.81632661819458
+calculating for t=2.8775510787963867
+calculating for t=2.9387755393981934
+calculating for t=3.0

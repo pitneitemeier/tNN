@@ -26,7 +26,8 @@ class ExactSampler(BaseSampler):
 
     def __call__(self, model, alpha, val_set_index=0):
         if self.spins is None:
-           self.spins = utils.get_all_spin_configs(self.lattice_sites).type(torch.get_default_dtype())
+            print("generating spins")
+            self.spins = utils.get_all_spin_configs(self.lattice_sites).type(torch.get_default_dtype())
         if not (model.device == self.device):
             self.to(model.device)
         return self.spins.unsqueeze(0)

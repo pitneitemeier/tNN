@@ -38,6 +38,18 @@ class Train_Data(Dataset):
         alpha[:, 0] = (self.t_range[1] - self.t_range[0]) * torch.rand(1,1) + self.t_range[0]
         return {'alpha': alpha}
 
+class Simple_Val_Data(Dataset):
+    def __init__(self, alpha, ED_data):
+        self.len = alpha.shape[1] #t_val per set
+        self.alpha = alpha
+        self.ED_data = ED_data
+        
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        return {'alpha': self.alpha[:,index,:], 'ED_data': self.ED_data[:,index]}
+
 
 class Val_Data(Dataset):
     def __init__(self, alpha, ED_data):
