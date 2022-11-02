@@ -2,20 +2,19 @@
 # Initial working directory:
 #SBATCH -D ./
 # Job name
-#SBATCH -J TFI14_sr
+#SBATCH -J TFI6
 #
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
-#SBATCH --gres=gpu:a100:2
-#SBATCH --cpus-per-task=36
-#SBATCH --mem=250000
+#SBATCH --gres=gpu:a100:1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=125000
 #
-#SBATCH --time=10:00:00
-#SBATCH --output=out/TFI14_sr.out
+#SBATCH --time=23:59:00
+#SBATCH --output=out/TFI6_scaling.out
 #SBATCH --mail-type=none
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
 
-module load intel/19.1.3 impi/2019.9 mkl/2020.4
 module load cuda/11.2
 module load anaconda/3/2021.11
-python TFI.py
+python TFI_scaling_6.py

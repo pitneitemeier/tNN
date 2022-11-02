@@ -127,6 +127,7 @@ import matplotlib.pyplot as plt
 
 def plot_res(t_arr, h_arr, magn_list):
   fig, ax = plt.subplots(figsize=(10,10))
+  ax.set_title(f'{lattice_sites}')
   i=0
   for h, magn in zip(h_arr, magn_list):
     ax.plot(t_arr, magn, label = f'{h:.1f}', c=f'C{i}')
@@ -135,9 +136,9 @@ def plot_res(t_arr, h_arr, magn_list):
   #ax.plot(data[:, 0], data[:, 1], c="red", label=r"Transverse magnetization $\langle X\rangle$", ls='--')
   fig.savefig('ED_res.png')
 
-lattice_sites = 15
+lattice_sites = 12
 res_folder = f'TFI{lattice_sites}x/'
-psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) - e_i(1,2) ))
+psi_init = ( 1 / np.sqrt(2) * ( e_i(0,2) + e_i(1,2) ))
 #psi_init = e_i(0,2)
 psi_init = get_init_state_kron(psi_init, lattice_sites)
 print('building magn op')

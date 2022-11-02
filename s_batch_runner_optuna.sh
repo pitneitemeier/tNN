@@ -2,7 +2,7 @@
 # Initial working directory:
 #SBATCH -D ./
 # Job name
-#SBATCH -J TFIoptuna
+#SBATCH -J TFIopt14
 #
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
@@ -11,12 +11,11 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=12500
-#SBATCH --time=20:10:00
-#SBATCH --output=out/TFI14raven_optuna1.out
-#SBATCH --mail-type=none
+#SBATCH --time=23:59:00
+#SBATCH --output=out/TFI14_optuna_2.out
+#SBATCH --mail-type=all
 #SBATCH --mail-user=pit.neitemeier@rwth-aachen.de
 
-module load intel/19.1.3 impi/2019.9 mkl/2020.4
 module load cuda/11.2
 module load anaconda/3/2021.11
-python optuna_opt.py
+python optuna_opt_14.py

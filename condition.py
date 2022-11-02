@@ -107,7 +107,7 @@ class schrodinger_eq_per_config(Condition):
         return Datasets.Train_Data(t_range=self.t_range, h_param_range=self.h_param_range, epoch_len=self.epoch_len)
 
 class Simple_ED_Validation(Condition):
-    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png', name_app=''):
+    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png', name_app='', plot_folder=''):
         super().__init__()
         self.sampler = sampler
         self.MC_sampling = sampler.is_MC
@@ -118,6 +118,7 @@ class Simple_ED_Validation(Condition):
         self.obs_map = utils.get_map(obs, lattice_sites)
         self.plot_fmt = plot_fmt
         self.name_app = name_app
+        self.plot_folder = plot_folder
 
     def to(self, device):
         #self.ED_data = self.ED_data.to(device)
@@ -178,7 +179,7 @@ class Simple_ED_Validation(Condition):
             ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
             ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
         ax.legend()
-        fig.savefig(tot_title + self.name_app + self.plot_fmt)
+        fig.savefig(self.plot_folder + tot_title + self.name_app + self.plot_fmt)
         plt.close(fig)
 
 class ED_Validation(Condition):
