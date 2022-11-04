@@ -22,7 +22,7 @@ class ExactSampler(BaseSampler):
         self.spins = None
 
     def to(self, device):
-        print('trying to move spins')
+        #print('trying to move spins')
         self.spins = self.spins.to(device)
 
     def __call__(self, model, alpha, val_set_index=0):
