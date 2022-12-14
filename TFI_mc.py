@@ -29,7 +29,7 @@ name = "1"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 4
+    lattice_sites = 8
     init_polarization = 'x'
     
     h1 = []
@@ -60,15 +60,16 @@ if __name__=='__main__':
     ED_magn = ED_magn[0:end_point]
 
     print('validating on h= ', val_h_params)
+
     batch_size = 1000
     tot_batches = 1000
 
     ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
-    train_sampler = sampler.RandomSampler(lattice_sites, 1)
+    train_sampler = sampler.MCTrainSampler(lattice_sites, batch_size=1000, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list, lattice_sites, train_sampler, (0,end_time), [(.15,1.4)], epoch_len=tot_batches, name='schrodinger')
+    schrodinger = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=int(1000))
     val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,

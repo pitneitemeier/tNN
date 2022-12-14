@@ -21,6 +21,7 @@ class Environment(LightningDataModule):
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
+        self.val_batch_size = val_batch_size
 
     def setup(self, stage: Optional[str] = None):
         self.train_data = self.train_condition.get_dataset()
