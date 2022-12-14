@@ -33,6 +33,21 @@ class ExactSampler(BaseSampler):
             self.to(model.device)
         return self.spins.unsqueeze(0)
 
+class ExactBatchedSampler(BaseSampler):
+    def __init__(self, lattice_sites, batch_size) -> None:
+        assert(2**lattice_sites % batch_size == 0)
+        super().__init__(lattice_sites)
+        self.batch_size = batch_size
+        self.num_batches = 2**lattice_sites // batch_size
+
+    def __call__(self, model, alphas, batch):
+        mask = 2**torch.arange(self.lattice_sites, device=model.device)
+        spins = torch.arange(batch * self.batch_size, (batch + 1)* self.batch_size, 1, device=model.device)
+        spins = 2*(spins.unsqueeze(-1).bitwise_and(mask).ne(0)) - 1
+        return spins.unsqueeze(0).to(dtype=torch.get_default_dtype())
+
+
+
 class RandomSampler(BaseSampler):
     def __init__(self, lattice_sites, num_samples):
         super().__init__(lattice_sites)

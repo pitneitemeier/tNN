@@ -178,6 +178,47 @@ class Wave_Fun(LightningModule):
             observable = o_loc.sum(1)/num_samples
         return torch.real(observable) 
 
+    def measure_observable_compiled_batched(self, alpha, sampler, obs_mat, obs_map):
+        '''
+        allows the measurement of observables of type Operator that have been compiled to mat_els and a map using utils.get_total_mat_els and utils.get_map
+        Parameters
+        ----------
+        alpha: tensor, dtype=float
+            inputs to the wave function (time, ext_param)
+            shape = (num_alpha_configs, 1, num_inputs)
+        sampler : samplers.BaseSampler 
+            sampler to get spin configs for alpha values. Can be exact (all spin configs) or any type of MC sampler. 
+            Calculation of expectation values is automatically adjusted according to sampler.is_MC
+        returns
+        -------
+        observable : tensor
+            the observable
+            shape = (num_alpha_configs)
+        '''
+        ext_param_scale = None
+        if isinstance(obs_mat, list):
+            #assume if it is list then it has to be scaled with external params of alpha
+            ext_param_scale = utils.calc_h_mult(self, alpha, obs_mat)
+            obs_mat = torch.cat(obs_mat, dim=3)
+        if not sampler.is_MC:
+            psi_sq_sum = torch.zeros((alpha.shape[0], 1), device=self.device, dtype=torch.complex128)
+            psi_s_o_loc_sum = torch.zeros((alpha.shape[0], 1), device=self.device, dtype=torch.complex128)
+            for i in range(sampler.num_batches):
+                spins = sampler(self, alpha, i)
+                sp_o = utils.get_sp(spins, obs_map)
+                psi_sp_o = self.call_forward_sp(sp_o, alpha)
+                o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins, ext_param_scale=ext_param_scale)
+                psi_s = self.call_forward(spins, alpha)
+                psi_sq_sum += (torch.abs(psi_s) ** 2).sum(1)
+                psi_s_o_loc_sum += (torch.conj(psi_s) * o_loc).sum(1)
+                #print(psi_sq_sum.shape, psi_s_o_loc_sum.shape)
+            observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
+        else:
+            print('nyi!')
+        return torch.real(observable) 
+    
+
+
 
 
 
