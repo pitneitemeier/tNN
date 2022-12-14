@@ -25,11 +25,11 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-name = "_check_1"
+name = "1"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 10
+    lattice_sites = 8
     init_polarization = 'x'
     
     h1 = []
@@ -46,38 +46,37 @@ if __name__=='__main__':
     corr_list = [ex_op.avg_correlation(op.Sz, d+1, lattice_sites) for d in range(int(lattice_sites/2))]
 
     ### loading ED Data for Validation
+    end_time = 1.5
     folder = f'ED_data/TFI{lattice_sites}{init_polarization}/'
     append = '_0.2_1.3.csv'
     val_h_params = np.loadtxt(folder + 'h_params' + append, delimiter=',')
     val_t_arr = np.loadtxt(folder + 't_arr' + append, delimiter=',')
+    end_point = int(1.5/3 * val_t_arr.shape[0])
+    val_t_arr = val_t_arr[0:end_point]
     val_alpha = np.concatenate(
         (np.broadcast_to(val_t_arr.reshape(1,-1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1)), 
         np.broadcast_to(val_h_params.reshape(-1,1,1), (val_h_params.shape[0], val_t_arr.shape[0], 1))), 2)
+    ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
+    ED_magn = ED_magn[0:end_point]
 
     print('validating on h= ', val_h_params)
 
-    ED_magn = np.loadtxt(folder + 'ED_magn' + append, delimiter=',')
-
-    ### Defining the range for the external parameter that is trained
-    h_param_range = [(0.15, 1.35)]
+    batch_size = 1000
+    tot_batches = 1000
 
     ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
-    train_sampler = sampler.RandomSampler(lattice_sites, 1)
+    train_sampler = sampler.MCTrainSampler(lattice_sites, batch_size=1000, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list=h_list, lattice_sites=lattice_sites, name='TFI}', 
-        h_param_range=h_param_range, sampler=train_sampler, t_range=(0,3), epoch_len=4000, exp_decay=False)
+    schrodinger = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=int(1000))
     val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
-        batch_size=4000, val_batch_size=5, test_batch_size=1, num_workers=36)
-    #model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
-    #    act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
-    #    tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=64, psi_num_hidden=3, step_size=5, gamma=0.1)
-    model = models.ParametrizedFeedForward.load_from_checkpoint("TFI10x_FF_1.ckpt")
-    model.lr = 0
-
-    trainer = pl.Trainer(accelerator="gpu", devices=2, strategy="ddp", max_epochs=1)
+        batch_size=1, val_batch_size=5, test_batch_size=5, num_workers=0)
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=16,
+        tNN_hidden=32, tNN_num_hidden=3, mult_size=256, psi_hidden=32, psi_num_hidden=3, step_size=10, gamma=0.1)
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=1, gradient_clip_val=.5,
+                        accelerator="gpu", devices=1)
     trainer.fit(model, env)
-    #trainer.test(model=model, datamodule=env)

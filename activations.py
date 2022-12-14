@@ -564,6 +564,7 @@ class lattice_block(nn.Module):
       conv_out = layer(conv_out)
     out = self.last_linear( self.flatten_conv(conv_out) )
     return out
+    
 
 class ResConv1d(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, act_fun, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros', device=None, dtype=None):

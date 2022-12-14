@@ -30,7 +30,39 @@ class Condition(ABC):
         raise NotImplementedError()
 
 
+
+
+class schrodinger_mc(Condition):
+    def __init__(self, h_list, lattice_sites, sampler, epoch_len, name):
+        super().__init__()
+        h_tot = sum(h_list, [])
+        self.h_mat_list = [utils.get_total_mat_els(h, lattice_sites) for h in h_list]
+        self.h_map = utils.get_map(h_tot, lattice_sites)
+        self.name = name
+        self.epoch_len = epoch_len
+        self.sampler = sampler
+        self.lattice_sites = lattice_sites
+
+    def to(self, device):
+        self.h_map = self.h_map.to(device)
+        for i in range(len(self.h_mat_list)):
+            self.h_mat_list[i] = self.h_mat_list[i].to(device)
+        self.device = device
+    
+    def __str__(self):
+        return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
+    
+    def __call__(self, model, _):
+        if not (model.device == self.device):
+            self.to(model.device)
+        data = self.sampler(model)
+        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], data['psi'], self.h_map, self.h_mat_list)
+        return torch.mean( utils.abs_sq(schrodinger_residual) )
         
+
+    def get_dataset(self):
+        return Datasets.Dummy_Data(epoch_len=self.epoch_len)
+
 class schrodinger_eq_time_dep(Condition):
     def __init__(self, h_list, lattice_sites, sampler, t_range, h_func, epoch_len, name, weight = 1):
         super().__init__()
@@ -81,7 +113,6 @@ class schrodinger_eq_per_config(Condition):
         self.lattice_sites = lattice_sites
         self.exp_decay = exp_decay
 
-
     def to(self, device):
         self.h_map = self.h_map.to(device)
         for i in range(len(self.h_mat_list)):
@@ -107,7 +138,7 @@ class schrodinger_eq_per_config(Condition):
         return Datasets.Train_Data(t_range=self.t_range, h_param_range=self.h_param_range, epoch_len=self.epoch_len)
 
 class Simple_ED_Validation(Condition):
-    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png', name_app=''):
+    def __init__(self, obs, lattice_sites, ED_data, alpha, val_names, sampler, plot_fmt='.png', name_app='', plot_folder=''):
         super().__init__()
         self.sampler = sampler
         self.MC_sampling = sampler.is_MC
@@ -118,6 +149,7 @@ class Simple_ED_Validation(Condition):
         self.obs_map = utils.get_map(obs, lattice_sites)
         self.plot_fmt = plot_fmt
         self.name_app = name_app
+        self.plot_folder = plot_folder
 
     def to(self, device):
         #self.ED_data = self.ED_data.to(device)
@@ -178,7 +210,7 @@ class Simple_ED_Validation(Condition):
             ax.plot(t_arr, observable, label=label, c=f'C{val_set_idx}')
             ax.plot(t_arr, ED_observable, c=f'C{val_set_idx}', ls='--')
         ax.legend()
-        fig.savefig(tot_title + self.name_app + self.plot_fmt)
+        fig.savefig(self.plot_folder + tot_title + self.name_app + self.plot_fmt)
         plt.close(fig)
 
 class ED_Validation(Condition):

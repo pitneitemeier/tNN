@@ -123,6 +123,18 @@ class Train_Data_time_dep(Dataset):
         t = (self.t_range[1] - self.t_range[0]) * torch.rand(1) + self.t_range[0]
         return {'t': t}
 
+class Dummy_Data(Dataset):
+    def __init__(self, epoch_len):
+        #just setting fixed epoch len to define the interval for validation and lr scheduling
+        self.epoch_len = epoch_len
+
+    def __len__(self):
+        return self.epoch_len
+
+    def __getitem__(self, index):
+        return {}
+
+
 if (__name__ == '__main__'):
    alpha = torch.cat((torch.arange(0, 10).reshape(1,-1,1).repeat(4, 1, 1), torch.arange(0,4).reshape(-1,1,1).repeat(1, 10, 1)), 2)
    dataset = Val_Data(alpha)

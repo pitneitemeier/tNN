@@ -200,6 +200,24 @@ def calc_h_mult(model, alpha, h_mat_list):
         current_ind += next_ind
     return h_mult
 
+def schrodinger_residual_mc(model, alphas, spins, _, h_map, h_mat_list):
+    #print(f'requieres grad for alpha and psi: {alphas.requires_grad}, {psi_s.requires_grad}')
+    alphas = alphas.detach().clone()
+    spins = spins.detach().clone()
+
+    alphas.requires_grad = True
+    psi_s = model.call_forward(spins, alphas)
+  
+    sp_h = get_sp(spins, h_map)
+    psi_sp_h = model.call_forward_sp(sp_h, alphas)
+    
+    h_mult = calc_h_mult(model, alphas, h_mat_list)
+    h_mat = torch.cat(h_mat_list, dim=3)
+    h_loc = calc_Oloc(psi_sp_h, h_mat, spins, h_mult)
+    
+    dt_psi_s = calc_dt_psi(psi_s, alphas)
+    return (dt_psi_s + 1j * h_loc) / psi_s
+
 def schrodinger_res_per_config(model, alpha, sampler, h_map, h_mat_list):
     spins = sampler(model, alpha)
     h_mult = calc_h_mult(model, alpha, h_mat_list)
