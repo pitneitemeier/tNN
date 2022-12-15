@@ -29,7 +29,7 @@ name = "1"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 4
+    lattice_sites = 8
     init_polarization = 'x'
     
     h1 = []
@@ -68,11 +68,11 @@ if __name__=='__main__':
     val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
-    schrodinger = cond.schrodinger_eq_per_config(h_list, lattice_sites, train_sampler, (0,end_time), [(.15,1.4)], epoch_len=tot_batches, name='schrodinger')
+    schrodinger = cond.schrodinger_eq_per_config(h_list, lattice_sites, train_sampler, (0,end_time), [(.15,1.4)], epoch_len=tot_batches*batch_size, name='schrodinger')
     val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
-        batch_size=1, val_batch_size=5, test_batch_size=5, num_workers=0)
+        batch_size=batch_size, val_batch_size=5, test_batch_size=5, num_workers=0)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=16,
         tNN_hidden=32, tNN_num_hidden=3, mult_size=256, psi_hidden=32, psi_num_hidden=3, step_size=10, gamma=0.1)

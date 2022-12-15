@@ -56,7 +56,7 @@ class schrodinger_mc(Condition):
         if not (model.device == self.device):
             self.to(model.device)
         data = self.sampler(model)
-        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], data['psi'], self.h_map, self.h_mat_list)
+        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], self.h_map, self.h_mat_list)
         return torch.mean( utils.abs_sq(schrodinger_residual) )
         
 
@@ -173,6 +173,7 @@ class ED_Validation_batched(Condition):
             res.append(torch.stack((alpha.squeeze()[:,0],observable,data_dict['ED_data'][i]), dim=1))
         res = torch.stack(res, dim=0)
         loss /= i
+        torch.cuda.empty_cache()
         return loss, res
 
     def get_num_val_sets(self):

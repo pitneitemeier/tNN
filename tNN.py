@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from collections import Sequence
 import sampler
 import collections
+import gc
 
 class Environment(LightningDataModule):
     def __init__(self, train_condition, val_condition, batch_size, val_batch_size, test_batch_size=None, num_workers=0, test_condition=None):
@@ -124,7 +125,7 @@ class Wave_Fun(LightningModule):
         
         if self.global_rank==0:
             self.trainer.datamodule.val_condition.plot_results(self, res)
-
+            
     def test_step(self, data_dict, index):
         torch.set_grad_enabled(True)
         loss, res = self.trainer.datamodule.test_condition(self, data_dict)
@@ -211,7 +212,6 @@ class Wave_Fun(LightningModule):
                 psi_s = self.call_forward(spins, alpha)
                 psi_sq_sum += (torch.abs(psi_s) ** 2).sum(1)
                 psi_s_o_loc_sum += (torch.conj(psi_s) * o_loc).sum(1)
-                #print(psi_sq_sum.shape, psi_s_o_loc_sum.shape)
             observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
         else:
             print('nyi!')

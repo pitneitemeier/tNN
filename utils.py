@@ -200,10 +200,10 @@ def calc_h_mult(model, alpha, h_mat_list):
         current_ind += next_ind
     return h_mult
 
-def schrodinger_residual_mc(model, alphas, spins, _, h_map, h_mat_list):
+def schrodinger_residual_mc(model, alphas, spins, h_map, h_mat_list):
     #print(f'requieres grad for alpha and psi: {alphas.requires_grad}, {psi_s.requires_grad}')
-    alphas = alphas.detach().clone()
-    spins = spins.detach().clone()
+    #alphas = alphas.detach().clone()
+    #spins = spins.detach().clone()
 
     alphas.requires_grad = True
     psi_s = model.call_forward(spins, alphas)

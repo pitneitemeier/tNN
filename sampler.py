@@ -131,20 +131,19 @@ def suggest_alpha_step(alpha, step_size):
     alpha[alpha < 0] = - alpha[alpha < 0]
     return alpha
 
-def single_flip_train(current_sample):
-    new_sample = current_sample.clone()
-    num_samples = new_sample.shape[0]
-    lattice_sites = new_sample.shape[2]
+def single_flip_train(sample):
+    num_samples = sample.shape[0]
+    lattice_sites = sample.shape[2]
     flip_ind = torch.randint(0, lattice_sites, 
-        (num_samples,), device=new_sample.device) + lattice_sites * torch.arange(0, num_samples, device=new_sample.device)
-    (new_sample.flatten())[flip_ind] *= -1
-    return new_sample
+        (num_samples,), device=sample.device) + lattice_sites * torch.arange(0, num_samples, device=sample.device)
+    (sample.flatten())[flip_ind] = (sample.flatten())[flip_ind] * (-1)
+    return sample
 
 def scale_alphas(alphas, alpha_max, alpha_min):
     return alphas * (alpha_max - alpha_min) + alpha_min
 
 def update_with_accepted(accept, old_tensor, new_tensor):
-    return accept * new_tensor + (1 - accept) * old_tensor
+    return torch.where(accept, new_tensor, old_tensor).detach()
 
 class MCTrainSampler(BaseSampler):
     def __init__(self, lattice_sites, batch_size, alpha_step, alpha_max, alpha_min) -> None:
@@ -153,7 +152,7 @@ class MCTrainSampler(BaseSampler):
         self.alpha_step = alpha_step
         self.alpha_max = torch.tensor(alpha_max)
         self.alpha_min = torch.tensor(alpha_min)
-        self.alphas = torch.rand((batch_size, 1, self.alpha_max.shape[0]), requires_grad=True)
+        self.alphas = torch.rand((batch_size, 1, self.alpha_max.shape[0]))
         self.spins =  2 * torch.randint(0, 2, (batch_size, 1, self.lattice_sites), dtype=torch.get_default_dtype()) - 1
         self.psi = None
 
@@ -171,13 +170,13 @@ class MCTrainSampler(BaseSampler):
             self.psi = model.call_forward(self.spins, self.alphas)
             return
         # generate new samples and calculate psi
-        new_alphas = suggest_alpha_step(self.alphas, self.alpha_step)
-        new_spins = single_flip_train(self.spins)
+        new_alphas = suggest_alpha_step(self.alphas.detach(), self.alpha_step)
+        new_spins = single_flip_train(self.spins.detach())
         new_psi = model.call_forward(new_spins, new_alphas)
 
         # decide wether to accept new samples according to metropolis algorithm
         transition_prob = torch.clamp(utils.abs_sq(new_psi) / (utils.abs_sq(self.psi) + 1e-8), 0, 1)
-        accept = torch.bernoulli(transition_prob)
+        accept = torch.bernoulli(transition_prob).type(torch.bool)
         
         # update samples
         self.spins = update_with_accepted(accept, self.spins, new_spins)
@@ -191,7 +190,7 @@ class MCTrainSampler(BaseSampler):
 
         # scale the alphas to the training range
         alphas = scale_alphas(self.alphas, self.alpha_max, self.alpha_min)
-        return {'psi': self.psi, 'alphas': alphas, 'spins':self.spins}
+        return {'alphas': alphas.detach(), 'spins':self.spins.detach()}
 
 
         
