@@ -7,9 +7,8 @@ import torch
 import utils
 import Datasets
 import matplotlib.pyplot as plt
-from collections import Sequence
 import sampler
-import collections
+import collections.abc as collections
 import gc
 
 class Environment(LightningDataModule):

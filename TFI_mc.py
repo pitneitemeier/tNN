@@ -29,7 +29,7 @@ name = "_mc"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 8
+    lattice_sites = 10
     init_polarization = 'x'
     
     h1 = []
@@ -61,12 +61,12 @@ if __name__=='__main__':
 
     print('validating on h= ', val_h_params)
 
-    batch_size = 1000
+    batch_size = 10000
     tot_batches = 2000
 
-    ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
+    ### The samplers that are used for training and validation.
     train_sampler = sampler.MCTrainSampler(lattice_sites, batch_size=batch_size, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
-    val_sampler = sampler.ExactSampler(lattice_sites)
+    val_sampler = sampler.MCMCSampler(lattice_sites, 100, 100)
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=tot_batches)
@@ -77,6 +77,6 @@ if __name__=='__main__':
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=16,
         tNN_hidden=32, tNN_num_hidden=3, mult_size=256, psi_hidden=32, psi_num_hidden=3, step_size=10, gamma=0.1)
-    trainer = pl.Trainer(fast_dev_run=False, max_epochs=1, gradient_clip_val=.5,
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=5, gradient_clip_val=.5,
                         accelerator="gpu", devices=1)
     trainer.fit(model, env)
