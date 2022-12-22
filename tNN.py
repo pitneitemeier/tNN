@@ -111,10 +111,14 @@ class Wave_Fun(LightningModule):
         return {'loss' :loss}
 
     def validation_step(self, data_dict, index):
-        loss, res = self.trainer.datamodule.val_condition(self, data_dict)
+        torch.set_grad_enabled(True)
+        #loss, res = self.trainer.datamodule.val_condition(self, data_dict)
+        loss, _ = self.trainer.datamodule.val_condition(self, data_dict)
         self.log('val_loss', loss, prog_bar=True)
-        return res
+        return loss
+        #return res
     
+    '''
     def validation_epoch_end(self, res):
         res = torch.cat(res, dim=0)
         res = self.all_gather(res)
@@ -124,6 +128,7 @@ class Wave_Fun(LightningModule):
         
         if self.global_rank==0:
             self.trainer.datamodule.val_condition.plot_results(self, res)
+    '''
             
     def test_step(self, data_dict, index):
         torch.set_grad_enabled(True)
@@ -166,16 +171,15 @@ class Wave_Fun(LightningModule):
         spins = sampler(self, alpha)
         sp_o = utils.get_sp(spins, obs_map)
         psi_sp_o = self.call_forward_sp(sp_o, alpha)
+        psi_s = self.call_forward(spins, alpha)
         if not sampler.is_MC:
             o_loc = utils.calc_Oloc(psi_sp_o, obs_mat, spins, ext_param_scale=ext_param_scale)
-            psi_s = self.call_forward(spins, alpha)
             psi_sq_sum = (torch.abs(psi_s) ** 2).sum(1)
             psi_s_o_loc_sum = (torch.conj(psi_s) * o_loc).sum(1)
             observable = ( psi_s_o_loc_sum * (1 / psi_sq_sum) ).squeeze(1)
         else:
             o_loc = utils.calc_Oloc_MC(psi_sp_o, psi_s, obs_mat, spins, ext_param_scale=ext_param_scale)
-            num_samples = o_loc.shape[1]
-            observable = o_loc.sum(1)/num_samples
+            observable = o_loc.mean(1).squeeze()
         return torch.real(observable) 
 
     def measure_observable_compiled_batched(self, alpha, sampler, obs_mat, obs_map):

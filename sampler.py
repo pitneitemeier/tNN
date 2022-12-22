@@ -127,6 +127,7 @@ class MCMCSamplerChains(BaseSampler):
 
 def suggest_alpha_step(alpha, step_size):
     alpha = alpha + step_size * torch.randn(*alpha.shape, device=alpha.device)
+    #alpha = alpha + step_size * (torch.rand(*alpha.shape, device=alpha.device) - .5)
     alpha[alpha > 1] = 2 - alpha[alpha > 1]
     alpha[alpha < 0] = - alpha[alpha < 0]
     return alpha
@@ -143,7 +144,7 @@ def scale_alphas(alphas, alpha_max, alpha_min):
     return alphas * (alpha_max - alpha_min) + alpha_min
 
 def update_with_accepted(accept, old_tensor, new_tensor):
-    return torch.where(accept, new_tensor, old_tensor).detach()
+    return torch.where(accept, new_tensor.detach(), old_tensor.detach())
 
 class MCTrainSampler(BaseSampler):
     def __init__(self, lattice_sites, batch_size, alpha_step, alpha_max, alpha_min) -> None:
@@ -152,9 +153,10 @@ class MCTrainSampler(BaseSampler):
         self.alpha_step = alpha_step
         self.alpha_max = torch.tensor(alpha_max)
         self.alpha_min = torch.tensor(alpha_min)
-        self.alphas = torch.rand((batch_size, 1, self.alpha_max.shape[0]))
+        self.alphas = torch.rand((batch_size, 1, self.alpha_max.shape[0]), requires_grad=True)
         self.spins =  2 * torch.randint(0, 2, (batch_size, 1, self.lattice_sites), dtype=torch.get_default_dtype()) - 1
         self.psi = None
+        self.dt_psi = None
 
     def to(self, device):
         self.device = device
@@ -168,20 +170,28 @@ class MCTrainSampler(BaseSampler):
     def _update_samples(self, model):
         if self.psi is None:
             self.psi = model.call_forward(self.spins, self.alphas)
+            self.dt_psi = utils.calc_dt_psi(self.psi, self.alphas)
             return
         # generate new samples and calculate psi
         new_alphas = suggest_alpha_step(self.alphas.detach(), self.alpha_step)
+        new_alphas.requires_grad = True
+        new_alphas.grad = None
         new_spins = single_flip_train(self.spins.detach())
         new_psi = model.call_forward(new_spins, new_alphas)
+        old_psi = model.call_forward(self.spins, self.alphas)
+        new_dt_psi = utils.calc_dt_psi(new_psi, new_alphas).detach()
 
         # decide wether to accept new samples according to metropolis algorithm
-        transition_prob = torch.clamp(utils.abs_sq(new_psi) / (utils.abs_sq(self.psi) + 1e-8), 0, 1)
+        transition_prob = torch.clamp(utils.abs_sq(new_psi.detach()) / (utils.abs_sq(old_psi.detach()) + 1e-8), 0, 1)
         accept = torch.bernoulli(transition_prob).type(torch.bool)
+        accept_ratio = accept.sum()/accept.numel()
+        model.log('accept_ratio', accept_ratio, prog_bar=True)
         
         # update samples
         self.spins = update_with_accepted(accept, self.spins, new_spins)
         self.alphas = update_with_accepted(accept, self.alphas, new_alphas)
         self.psi = update_with_accepted(accept, self.psi, new_psi)
+        self.dt_psi = update_with_accepted(accept, self.dt_psi, new_dt_psi)
 
     def __call__(self, model):
         if self.device != model.device:
@@ -190,7 +200,7 @@ class MCTrainSampler(BaseSampler):
 
         # scale the alphas to the training range
         alphas = scale_alphas(self.alphas, self.alpha_max, self.alpha_min)
-        return {'alphas': alphas.detach(), 'spins':self.spins.detach()}
+        return {'alphas': alphas.detach(), 'spins':self.spins.detach(), 'dt_psi':self.dt_psi.detach(), 'psi':self.psi.detach()}
 
 
         

@@ -61,8 +61,8 @@ if __name__=='__main__':
 
     print('validating on h= ', val_h_params)
 
-    batch_size = 10000
-    tot_batches = 2000
+    batch_size = 1000
+    tot_batches = 200
 
     ### The samplers that are used for training and validation.
     train_sampler = sampler.MCTrainSampler(lattice_sites, batch_size=batch_size, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
@@ -71,6 +71,8 @@ if __name__=='__main__':
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=tot_batches)
     val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
+    #val_cond = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=10)
+
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
         batch_size=1, val_batch_size=5, test_batch_size=5, num_workers=0)
@@ -80,3 +82,4 @@ if __name__=='__main__':
     trainer = pl.Trainer(fast_dev_run=False, max_epochs=5, gradient_clip_val=.5,
                         accelerator="gpu", devices=1)
     trainer.fit(model, env)
+    trainer.save_checkpoint(f'TFI_{lattice_sites}_mc.ckpt')
