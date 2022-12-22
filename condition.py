@@ -56,7 +56,7 @@ class schrodinger_mc(Condition):
         if not (model.device == self.device):
             self.to(model.device)
         data = self.sampler(model)
-        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], self.h_map, self.h_mat_list)
+        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], data['psi'], data['dt_psi'], self.h_map, self.h_mat_list)
         return torch.mean( utils.abs_sq(schrodinger_residual) )
         
 

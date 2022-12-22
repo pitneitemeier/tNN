@@ -25,11 +25,11 @@ def psi_init_x(spins):
 def psi_init_x_forward(spins, lattice_sites):
     return torch.full_like(spins[:, :1], 1)
 
-name = "1"
+name = "_1"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 8
+    lattice_sites = 10
     init_polarization = 'x'
     
     h1 = []
@@ -74,8 +74,9 @@ if __name__=='__main__':
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
         batch_size=batch_size, val_batch_size=5, test_batch_size=5, num_workers=0)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
-        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=16,
-        tNN_hidden=32, tNN_num_hidden=3, mult_size=256, psi_hidden=32, psi_num_hidden=3, step_size=10, gamma=0.1)
-    trainer = pl.Trainer(fast_dev_run=False, max_epochs=1, gradient_clip_val=.5,
+        act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
+        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=128, psi_num_hidden=3, step_size=10, gamma=0.1)
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=3, gradient_clip_val=.5,
                         accelerator="gpu", devices=1)
     trainer.fit(model, env)
+    trainer.save_checkpoint(f'TFI_{lattice_sites}_1')
