@@ -29,8 +29,83 @@ class Condition(ABC):
         'to not implemented for condition'
         raise NotImplementedError()
 
+class schrodinger_comparison(Condition):
+    def __init__(self, h_list, lattice_sites, mc_sampler, exact_sampler, random_sampler, epoch_len, name):
+        super().__init__()
+        h_tot = sum(h_list, [])
+        self.h_mat_list = [utils.get_total_mat_els(h, lattice_sites) for h in h_list]
+        self.h_map = utils.get_map(h_tot, lattice_sites)
+        self.name = name
+        self.epoch_len = epoch_len
+        self.mc_sampler = mc_sampler
+        self.exact_sampler = exact_sampler
+        self.random_sampler = random_sampler
+        self.lattice_sites = lattice_sites
 
+    def to(self, device):
+        self.h_map = self.h_map.to(device)
+        for i in range(len(self.h_mat_list)):
+            self.h_mat_list[i] = self.h_mat_list[i].to(device)
+        self.device = device
+    
+    def __str__(self):
+        return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
+    
+    def __call__(self, model, _):
+        if not (model.device == self.device):
+            self.to(model.device)
 
+        data = self.mc_sampler(model)
+        schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], data['psi'], data['dt_psi'], self.h_map, self.h_mat_list)
+        mc_loss = torch.mean( utils.abs_sq(schrodinger_residual) )
+
+        data = self.exact_sampler(model)
+        schrodinger_residual = utils.schrodinger_residual(model, data['alphas'], data['spins'], self.h_map, self.h_mat_list)
+        exact_loss = torch.mean( utils.abs_sq(schrodinger_residual) )
+
+        data = self.random_sampler(model)
+        schrodinger_residual = utils.schrodinger_residual(model, data['alphas'], data['spins'], self.h_map, self.h_mat_list)
+        random_loss = torch.mean( utils.abs_sq(schrodinger_residual) )
+
+        model.log("r_loss", random_loss, prog_bar=True)
+        model.log("e_loss", exact_loss, prog_bar=True)
+        model.log("mc_loss", mc_loss, prog_bar=True)
+
+        return random_loss
+
+    def get_dataset(self):
+        return Datasets.Dummy_Data(epoch_len=self.epoch_len)
+
+class schrodinger(Condition):
+    def __init__(self, h_list, lattice_sites, sampler, epoch_len, name):
+        super().__init__()
+        h_tot = sum(h_list, [])
+        self.h_mat_list = [utils.get_total_mat_els(h, lattice_sites) for h in h_list]
+        self.h_map = utils.get_map(h_tot, lattice_sites)
+        self.name = name
+        self.epoch_len = epoch_len
+        self.sampler = sampler
+        self.lattice_sites = lattice_sites
+
+    def to(self, device):
+        self.h_map = self.h_map.to(device)
+        for i in range(len(self.h_mat_list)):
+            self.h_mat_list[i] = self.h_mat_list[i].to(device)
+        self.device = device
+    
+    def __str__(self):
+        return f"{self.name} hamiltonian for {self.lattice_sites} lattice sites \n"
+    
+    def __call__(self, model, _):
+        if not (model.device == self.device):
+            self.to(model.device)
+        data = self.sampler(model)
+        schrodinger_residual = utils.schrodinger_residual(model, data['alphas'], data['spins'], self.h_map, self.h_mat_list)
+        return torch.mean( utils.abs_sq(schrodinger_residual) )
+        
+
+    def get_dataset(self):
+        return Datasets.Dummy_Data(epoch_len=self.epoch_len)
 
 class schrodinger_mc(Condition):
     def __init__(self, h_list, lattice_sites, sampler, epoch_len, name):
@@ -57,7 +132,8 @@ class schrodinger_mc(Condition):
             self.to(model.device)
         data = self.sampler(model)
         schrodinger_residual = utils.schrodinger_residual_mc(model, data['alphas'], data['spins'], data['psi'], data['dt_psi'], self.h_map, self.h_mat_list)
-        return torch.mean( utils.abs_sq(schrodinger_residual) )
+        loss = torch.mean( utils.abs_sq(schrodinger_residual) )
+        return loss
         
 
     def get_dataset(self):
@@ -248,7 +324,7 @@ class Simple_ED_Validation(Condition):
             #print("observable shape", observable.shape)
             #print("Ed data shape", data_dict['ED_data'][i].shape)
             res.append(torch.stack((alpha.squeeze()[:,0],observable,data_dict['ED_data'][i]), dim=1))
-        res = torch.stack(res, dim=0)
+        res = torch.stack(res, dim=0).detach()
         loss /= i
         return loss, res
 

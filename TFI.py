@@ -65,18 +65,20 @@ if __name__=='__main__':
 
     ### The samplers that are used for training and validation. here fully random samples are used in training and full sums in validation
     train_sampler = sampler.RandomSampler(lattice_sites, 1)
-    val_sampler = sampler.ExactSampler(lattice_sites)
+    #val_sampler = sampler.ExactSampler(lattice_sites)
+    val_sampler = sampler.ExactBatchedSampler(lattice_sites, batch_size=8)
 
     ### define conditions that have to be satisfied
     schrodinger = cond.schrodinger_eq_per_config(h_list, lattice_sites, train_sampler, (0,end_time), [(.15,1.4)], epoch_len=tot_batches*batch_size, name='schrodinger')
-    val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
+    #val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
+    val_cond = cond.ED_Validation_batched(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
 
     env = tNN.Environment(train_condition=schrodinger, val_condition=val_cond, test_condition=val_cond,
         batch_size=batch_size, val_batch_size=5, test_batch_size=5, num_workers=0)
     model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
-        tNN_hidden=128, tNN_num_hidden=3, mult_size=1024, psi_hidden=128, psi_num_hidden=3, step_size=10, gamma=0.1)
-    trainer = pl.Trainer(fast_dev_run=False, max_epochs=3, gradient_clip_val=.5,
+        tNN_hidden=96, tNN_num_hidden=3, mult_size=1024, psi_hidden=96, psi_num_hidden=3, step_size=4, gamma=0.5)
+    trainer = pl.Trainer(fast_dev_run=False, max_epochs=5, gradient_clip_val=.5,
                         accelerator="gpu", devices=1)
     trainer.fit(model, env)
     trainer.save_checkpoint(f'TFI_{lattice_sites}_1')

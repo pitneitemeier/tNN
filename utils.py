@@ -146,7 +146,7 @@ def calc_Oloc_MC(psi_sp, psi_s, mat_els, spin_config, ext_param_scale = None):
 """
 from itertools import permutations
 #get all basis configurations to calculate stochastic mean
-def get_all_spin_configs(num_lattice_sites):
+dbsef get_all_spin_configs(num_lattice_sites):
   perm = np.zeros( (np.power( 2, num_lattice_sites ), num_lattice_sites) )
   currently_filled = 0
   for i in range(num_lattice_sites + 1):
@@ -209,9 +209,23 @@ def schrodinger_residual_mc(model, alphas, spins, psi_s, dt_psi_s, h_map, h_mat_
     h_loc = calc_Oloc(psi_sp_h, h_mat, spins, h_mult)
     
     alphas.requires_grad = True
+    alphas.grad = None
     psi_s = model.call_forward(spins, alphas)
     dt_psi_s = calc_dt_psi(psi_s, alphas)
     return (dt_psi_s + 1j * h_loc) / psi_s
+
+def schrodinger_residual(model, alphas, spins, h_map, h_mat_list):
+    sp_h = get_sp(spins, h_map)
+    psi_sp_h = model.call_forward_sp(sp_h, alphas)
+
+    h_mult = calc_h_mult(model, alphas, h_mat_list)
+    h_mat = torch.cat(h_mat_list, dim=3)
+    h_loc = calc_Oloc(psi_sp_h, h_mat, spins, h_mult)
+    
+    alphas.requires_grad = True
+    psi_s = model.call_forward(spins, alphas)
+    dt_psi_s = calc_dt_psi(psi_s, alphas)
+    return dt_psi_s + 1j * h_loc
 
 def schrodinger_res_per_config(model, alpha, sampler, h_map, h_mat_list):
     spins = sampler(model, alpha)

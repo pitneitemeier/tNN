@@ -109,7 +109,7 @@ class MCMCSamplerChains(BaseSampler):
         new_prob = accept * update_prob + (1 - accept) * current_prob
         return new_sample, new_prob
         
-    def __call__(self, model, alpha, val_set_index):
+    def __call__(self, model, alpha):
         sample = torch.zeros((alpha.shape[0], self.num_samples, self.lattice_sites), 
             device=model.device, dtype=torch.get_default_dtype())
         chains = (torch.randint(0, 2, (alpha.shape[0], 1, self.lattice_sites), 
@@ -132,6 +132,9 @@ def suggest_alpha_step(alpha, step_size):
     alpha[alpha < 0] = - alpha[alpha < 0]
     return alpha
 
+def suggest_new_alpha(alpha, _):
+    return torch.rand_like(alpha)
+
 def single_flip_train(sample):
     num_samples = sample.shape[0]
     lattice_sites = sample.shape[2]
@@ -153,7 +156,7 @@ class MCTrainSampler(BaseSampler):
         self.alpha_step = alpha_step
         self.alpha_max = torch.tensor(alpha_max)
         self.alpha_min = torch.tensor(alpha_min)
-        self.alphas = torch.rand((batch_size, 1, self.alpha_max.shape[0]), requires_grad=True)
+        self.alphas = scale_alphas(torch.rand((batch_size, 1, self.alpha_max.shape[0]), requires_grad=True), self.alpha_max, self.alpha_min)
         self.spins =  2 * torch.randint(0, 2, (batch_size, 1, self.lattice_sites), dtype=torch.get_default_dtype()) - 1
         self.psi = None
         self.dt_psi = None
@@ -168,18 +171,20 @@ class MCTrainSampler(BaseSampler):
         self.alpha_min = self.alpha_min.to(device)
 
     def _update_samples(self, model):
-        if self.psi is None:
-            self.psi = model.call_forward(self.spins, self.alphas)
-            self.dt_psi = utils.calc_dt_psi(self.psi, self.alphas)
-            return
         # generate new samples and calculate psi
-        new_alphas = suggest_alpha_step(self.alphas.detach(), self.alpha_step)
+        #new_alphas = suggest_alpha_step(self.alphas.detach(), self.alpha_step)
+        new_alphas = scale_alphas(suggest_new_alpha(self.alphas.detach(), self.alpha_step), self.alpha_max, self.alpha_min)
         new_alphas.requires_grad = True
         new_alphas.grad = None
         new_spins = single_flip_train(self.spins.detach())
         new_psi = model.call_forward(new_spins, new_alphas)
-        old_psi = model.call_forward(self.spins, self.alphas)
         new_dt_psi = utils.calc_dt_psi(new_psi, new_alphas).detach()
+        
+        self.alphas = self.alphas.detach()
+        self.alphas.requires_grad = True
+        self.alphas.grad = None
+        old_psi = model.call_forward(self.spins, self.alphas)
+        old_dt_psi = utils.calc_dt_psi(old_psi, self.alphas).detach()
 
         # decide wether to accept new samples according to metropolis algorithm
         transition_prob = torch.clamp(utils.abs_sq(new_psi.detach()) / (utils.abs_sq(old_psi.detach()) + 1e-8), 0, 1)
@@ -188,24 +193,129 @@ class MCTrainSampler(BaseSampler):
         model.log('accept_ratio', accept_ratio, prog_bar=True)
         
         # update samples
-        self.spins = update_with_accepted(accept, self.spins, new_spins)
-        self.alphas = update_with_accepted(accept, self.alphas, new_alphas)
-        self.psi = update_with_accepted(accept, self.psi, new_psi)
-        self.dt_psi = update_with_accepted(accept, self.dt_psi, new_dt_psi)
+        self.spins = update_with_accepted(accept, self.spins.detach(), new_spins.detach())
+        self.alphas = update_with_accepted(accept, self.alphas.detach(), new_alphas.detach())
+        self.psi = update_with_accepted(accept, old_psi.detach(), new_psi.detach())
+        self.dt_psi = update_with_accepted(accept, old_dt_psi.detach(), new_dt_psi.detach())
 
     def __call__(self, model):
         if self.device != model.device:
             self.to(model.device)
         self._update_samples(model)
 
+        return {'alphas': self.alphas.detach(), 'spins':self.spins.detach(), 'dt_psi':self.dt_psi.detach(), 'psi':self.psi.detach()}
+    
+class MCTrainSamplerChains(BaseSampler):
+    def __init__(self, lattice_sites, samples_per_chain, chains, alpha_step, alpha_max, alpha_min) -> None:
+        super().__init__(lattice_sites)
+        self.samples_per_chain = samples_per_chain
+        self.chains = chains
+        self.alpha_step = alpha_step
+        self.alpha_max = torch.tensor(alpha_max)
+        self.alpha_min = torch.tensor(alpha_min)
+        self.alphas = scale_alphas(torch.rand((self.chains, 1, self.alpha_max.shape[0]), requires_grad=True), self.alpha_max, self.alpha_min)
+        self.spins =  2 * torch.randint(0, 2, (self.chains, 1, self.lattice_sites), dtype=torch.get_default_dtype()) - 1
+        self.psi = None
+        self.dt_psi = None
+
+    def to(self, device):
+        self.device = device
+        self.alphas = self.alphas.to(device)
+        self.spins = self.spins.to(device)
+        if self.psi is not None:
+            self.psi = self.psi.to(device)
+        self.alpha_max = self.alpha_max.to(device)
+        self.alpha_min = self.alpha_min.to(device)
+
+    def _update_samples(self, model):
+        # generate new samples and calculate psi
+        #new_alphas = suggest_alpha_step(self.alphas.detach(), self.alpha_step)
+        new_alphas = scale_alphas(suggest_new_alpha(self.alphas.detach(), self.alpha_step), self.alpha_max, self.alpha_min)
+        new_alphas.requires_grad = True
+        new_alphas.grad = None
+        new_spins = single_flip_train(self.spins.detach())
+        new_psi = model.call_forward(new_spins, new_alphas)
+        new_dt_psi = utils.calc_dt_psi(new_psi, new_alphas).detach()
+        
+        self.alphas = self.alphas.detach()
+        self.alphas.requires_grad = True
+        self.alphas.grad = None
+        old_psi = model.call_forward(self.spins, self.alphas)
+        old_dt_psi = utils.calc_dt_psi(old_psi, self.alphas).detach()
+
+        # decide wether to accept new samples according to metropolis algorithm
+        transition_prob = torch.clamp(utils.abs_sq(new_psi.detach()) / (utils.abs_sq(old_psi.detach()) + 1e-8), 0, 1)
+        accept = torch.bernoulli(transition_prob).type(torch.bool)
+        accept_ratio = accept.sum()/accept.numel()
+        model.log('accept_ratio', accept_ratio, prog_bar=True)
+        
+        # update samples
+        self.spins = update_with_accepted(accept, self.spins.detach(), new_spins.detach())
+        self.alphas = update_with_accepted(accept, self.alphas.detach(), new_alphas.detach())
+        self.psi = update_with_accepted(accept, old_psi.detach(), new_psi.detach())
+        self.dt_psi = update_with_accepted(accept, old_dt_psi.detach(), new_dt_psi.detach())
+
+    def __call__(self, model):
+        if self.device != model.device:
+            self.to(model.device)
+        alphas = []
+        spins = []
+        for _ in range(self.samples_per_chain):
+            self._update_samples(model)
+            alphas.append(self.alphas.detach())
+            spins.append(self.spins.detach())
+        #print(f"{alphas[0].shape=}, {len(alphas)=}")
+        #print(f"{spins[0].shape=}, {len(spins)=}")
+        return {'alphas': torch.cat(alphas, dim=0), 'spins': torch.cat(spins, dim=0), 'dt_psi':None, 'psi':None}   
+
+class ExactTrainSampler(BaseSampler):
+    def __init__(self, lattice_sites, batch_size, alpha_max, alpha_min) -> None:
+        super().__init__(lattice_sites)
+        self.batch_size = batch_size
+        self.alpha_max = torch.tensor(alpha_max)
+        self.alpha_min = torch.tensor(alpha_min)
+        self.alphas = torch.linspace(0,1,batch_size).reshape(-1,1,1).repeat(1,1,self.alpha_max.shape[0])
+        self.spins = utils.get_all_spin_configs(lattice_sites).unsqueeze(1).type(torch.get_default_dtype())
+
+    def to(self, device):
+        self.device = device
+        self.alphas = self.alphas.to(device)
+        self.spins = self.spins.to(device)
+        self.alpha_max = self.alpha_max.to(device)
+        self.alpha_min = self.alpha_min.to(device)
+
+    def __call__(self, model):
+        if self.device != model.device:
+            self.to(model.device)
+
         # scale the alphas to the training range
         alphas = scale_alphas(self.alphas, self.alpha_max, self.alpha_min)
-        return {'alphas': alphas.detach(), 'spins':self.spins.detach(), 'dt_psi':self.dt_psi.detach(), 'psi':self.psi.detach()}
-
-
+        alphas = alphas.unsqueeze(1).repeat(1, 2 ** self.lattice_sites, 1, 1).flatten(0,1)
+        spins = self.spins.unsqueeze(0).repeat(self.batch_size, 1, 1, 1).flatten(0,1)
+        return {'alphas': alphas.detach(), 'spins':spins.detach()}
         
 
+class RandomTrainSampler(BaseSampler):
+    def __init__(self, lattice_sites, batch_size, alpha_max, alpha_min) -> None:
+        super().__init__(lattice_sites)
+        self.batch_size = batch_size
+        self.alpha_max = torch.tensor(alpha_max)
+        self.alpha_min = torch.tensor(alpha_min)
 
+    def to(self, device):
+        self.device = device
+        self.alpha_max = self.alpha_max.to(device)
+        self.alpha_min = self.alpha_min.to(device)
+
+    def __call__(self, model):
+        if self.device != model.device:
+            self.to(model.device)
+
+        # scale the alphas to the training range
+        alphas = torch.rand((self.batch_size, 1, self.alpha_max.shape[0]), device=model.device)
+        alphas = scale_alphas(alphas, self.alpha_max, self.alpha_min)
+        spins = 2 * torch.randint(0, 2, (self.batch_size, 1, self.lattice_sites), dtype=torch.get_default_dtype(), device=model.device) - 1
+        return {'alphas': alphas.detach(), 'spins':spins.detach()}
 
 if __name__ == '__main__':
     pass

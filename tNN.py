@@ -112,13 +112,12 @@ class Wave_Fun(LightningModule):
 
     def validation_step(self, data_dict, index):
         torch.set_grad_enabled(True)
-        #loss, res = self.trainer.datamodule.val_condition(self, data_dict)
-        loss, _ = self.trainer.datamodule.val_condition(self, data_dict)
+        loss, res = self.trainer.datamodule.val_condition(self, data_dict)
+        #loss, _ = self.trainer.datamodule.val_condition(self, data_dict)
         self.log('val_loss', loss, prog_bar=True)
-        return loss
-        #return res
+        #return loss
+        return res
     
-    '''
     def validation_epoch_end(self, res):
         res = torch.cat(res, dim=0)
         res = self.all_gather(res)
@@ -128,7 +127,6 @@ class Wave_Fun(LightningModule):
         
         if self.global_rank==0:
             self.trainer.datamodule.val_condition.plot_results(self, res)
-    '''
             
     def test_step(self, data_dict, index):
         torch.set_grad_enabled(True)
