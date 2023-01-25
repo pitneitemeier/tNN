@@ -111,7 +111,7 @@ class Wave_Fun(LightningModule):
         return {'loss' :loss}
 
     def validation_step(self, data_dict, index):
-        torch.set_grad_enabled(True)
+        #torch.set_grad_enabled(True)
         loss, res = self.trainer.datamodule.val_condition(self, data_dict)
         #loss, _ = self.trainer.datamodule.val_condition(self, data_dict)
         self.log('val_loss', loss, prog_bar=True)

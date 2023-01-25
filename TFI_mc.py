@@ -29,7 +29,7 @@ name = "_mc"
 
 if __name__=='__main__':
     ### setting up hamiltonian
-    lattice_sites = 10
+    lattice_sites = 16
     init_polarization = 'x'
     
     h1 = []
@@ -62,29 +62,29 @@ if __name__=='__main__':
     print('validating on h= ', val_h_params)
 
     batch_size = 1000
-    tot_batches = 1000
+    tot_batches = 5000
 
     ### The samplers that are used for training and validation.
     mc_train_sampler = sampler.MCTrainSampler(lattice_sites, batch_size=batch_size, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
     #mc_train_sampler = sampler.MCTrainSamplerChains(lattice_sites, 10, 100, alpha_step=.1, alpha_max=[end_time,1.4], alpha_min=[0,.15])
     #exact_train_sampler = sampler.ExactTrainSampler(lattice_sites, batch_size=100, alpha_max=[end_time, 1.4], alpha_min=[0,0.15])
     #random_train_sampler = sampler.RandomTrainSampler(lattice_sites, batch_size=batch_size, alpha_max=[end_time, 1.4], alpha_min=[0,0.15])
-    #val_sampler = sampler.MCMCSampler(lattice_sites, 500, 100)
-    val_sampler = sampler.ExactSampler(lattice_sites)
+    val_sampler = sampler.MCMCSampler(lattice_sites, 4096, 10)
+    #val_sampler = sampler.ExactSampler(lattice_sites)
 
     ### define conditions that have to be satisfied
     #train_condition = cond.schrodinger_comparison(h_list=h_list, lattice_sites=lattice_sites, name='TFI', 
     #    exact_sampler=exact_train_sampler, random_sampler=random_train_sampler, mc_sampler=mc_train_sampler, epoch_len=tot_batches)
     train_condition = cond.schrodinger_mc(h_list, lattice_sites, mc_train_sampler, epoch_len=tot_batches, name='TFI_mc')
-    val_cond = cond.simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
+    val_cond = cond.Simple_ED_Validation(magn_op, lattice_sites, ED_magn, val_alpha, val_h_params, val_sampler, name_app=name)
     #val_cond = cond.schrodinger_mc(h_list=h_list, lattice_sites=lattice_sites, name='TFI', sampler=train_sampler, epoch_len=10)
 
 
     env = tNN.Environment(train_condition=train_condition, val_condition=val_cond, test_condition=val_cond,
         batch_size=1, val_batch_size=5, test_batch_size=5, num_workers=24)
-    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=1e-3, psi_init=psi_init_x_forward,
+    model = models.ParametrizedFeedForward(lattice_sites, num_h_params=1, learning_rate=5e-4, psi_init=psi_init_x_forward,
         act_fun=nn.GELU, kernel_size=3, num_conv_layers=3, num_conv_features=32,
-        tNN_hidden=96, tNN_num_hidden=3, mult_size=1024, psi_hidden=96, psi_num_hidden=3, step_size=4, gamma=0.1)
+        tNN_hidden=96, tNN_num_hidden=3, mult_size=1024, psi_hidden=96, psi_num_hidden=3, step_size=3, gamma=0.1)
     trainer = pl.Trainer(fast_dev_run=False, max_epochs=5, gradient_clip_val=.5,
                         accelerator="gpu", devices=1)
     trainer.fit(model, env)
